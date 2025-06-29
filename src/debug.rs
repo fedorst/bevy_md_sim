@@ -66,7 +66,7 @@ fn draw_selection_gizmos(
     if let Some(selected_entity) = selection.selected {
         if let Ok((transform, force, velocity)) = atom_query.get(selected_entity) {
             let start = transform.translation;
-            let force_vector = force.0 * 0.0004;
+            let force_vector = force.total * 0.0004;
             let f_end = start + force_vector;
             let v_end = start + velocity.0 * 0.1;
             gizmos.arrow(start, f_end, RED);
@@ -126,24 +126,29 @@ fn update_highlights(
 
 fn update_info_panel(
     selection: Res<SelectionState>,
-    atom_query: Query<(&AtomType, &Transform, &Velocity, &Force)>,
+    atom_query: Query<(&AtomType, &Velocity, &Force)>,
     panel_query: Query<Entity, With<DebugInfoPanel>>,
     mut writer: TextUiWriter,
 ) {
     if let Ok(panel_entity) = panel_query.single() {
         if let Some(selected_entity) = selection.selected {
-            if let Ok((atom_type, transform, velocity, force)) = atom_query.get(selected_entity) {
+            if let Ok((atom_type, velocity, force)) = atom_query.get(selected_entity) {
                 *writer.text(panel_entity, 0) = format!(
-                    "Selected Atom: {:?}\n\
-                         Type: {:?}\n\
-                         Position: {:.3?}\n\
-                         Velocity (mag): {:.3?}\n\
-                         Force (mag): {:.3?}",
+                    "Selected: {:?}\n\
+                     Type: {:?}\n\
+                     Vel (mag): {:.4}\n\
+                     --- Forces (mag) ---\n\
+                     Total: {:.4}\n\
+                     Bond: {:.4}\n\
+                     Angle: {:.4}\n\
+                     Non-Bonded: {:.4}",
                     selected_entity,
                     atom_type,
-                    transform.translation,
                     velocity.length(),
-                    force.length()
+                    force.total_magnitude(),
+                    force.bond.length(),
+                    force.angle.length(),
+                    force.non_bonded.length()
                 );
             }
         } else {

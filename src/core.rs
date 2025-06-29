@@ -30,14 +30,14 @@ impl AtomType {
         // OPLS-AA parameters (kJ/mol)
         match self {
             Self::Oxygen => 0.71128,
-            Self::Hydrogen => 0.0, // Typically non-interacting for LJ
+            Self::Hydrogen => 0.19246,
             Self::Carbon => 0.27614,
         }
     }
     pub fn sigma(&self) -> f32 {
         match self {
             Self::Oxygen => 0.3166,
-            Self::Hydrogen => 0.0,
+            Self::Hydrogen => 0.225,
             Self::Carbon => 0.350,
         }
     }
@@ -87,8 +87,19 @@ pub struct SystemConnectivity {
     pub angles: Vec<Angle>,
 }
 
-#[derive(Component, Deref, DerefMut, Default, Debug)]
-pub struct Force(pub Vec3);
+#[derive(Component, Default, Debug, Clone, Copy)]
+pub struct Force {
+    pub total: Vec3,
+    pub bond: Vec3,
+    pub angle: Vec3,
+    pub non_bonded: Vec3,
+}
+
+impl Force {
+    pub fn total_magnitude(&self) -> f32 {
+        self.total.length()
+    }
+}
 
 #[derive(Resource, Debug)]
 pub struct ForceField {
@@ -163,10 +174,25 @@ pub struct Velocity(pub Vec3);
 pub struct Acceleration(pub Vec3);
 
 #[derive(Resource, Default)]
-pub struct ExcludedPairs(pub HashSet<(Entity, Entity)>);
+pub struct ExcludedPairs {
+    pub one_two: HashSet<(Entity, Entity)>,   // Direct bonds (1-2)
+    pub one_three: HashSet<(Entity, Entity)>, // Angle partners (1-3)
+}
 
 #[derive(Resource, Default, Deref, DerefMut)]
 pub struct ActiveWallTime(pub f32);
+
+#[derive(Resource, Default)]
+pub struct Thermostat {
+    pub target_temperature: f32, // in K
+    pub tau: f32,                // coupling time in ps
+}
+
+#[derive(Resource, Default, Deref, DerefMut)]
+pub struct CurrentTemperature(pub f32);
+
+#[derive(Resource, Default, Deref, DerefMut)]
+pub struct ThermostatScale(pub f32);
 
 pub struct CorePlugin;
 
@@ -175,10 +201,16 @@ impl Plugin for CorePlugin {
         app.init_resource::<ForceField>()
             .init_resource::<SystemConnectivity>()
             .init_resource::<StepSimulation>()
-            .insert_resource(SimulationParameters { dt: 1e-5 })
+            .insert_resource(SimulationParameters { dt: 1e-4 })
             .init_resource::<StepCount>()
             .init_resource::<SimulationState>()
             .init_resource::<ActiveWallTime>()
+            .insert_resource(Thermostat {
+                target_temperature: 300.0, // Room temperature
+                tau: 0.001,                // A fairly strong coupling
+            })
+            .init_resource::<ThermostatScale>()
+            .init_resource::<CurrentTemperature>()
             .init_resource::<ExcludedPairs>();
     }
 }

@@ -1,5 +1,5 @@
 use super::core::*;
-use super::setup::{PauseText, TimeDisplayText}; // Use the public marker component
+use super::setup::{PauseText, TempDisplayText, TimeDisplayText}; // Use the public marker component
 use bevy::prelude::*;
 
 pub struct UIPlugin;
@@ -15,6 +15,7 @@ impl Plugin for UIPlugin {
                 update_pause_text,
                 update_time_display,
                 track_active_wall_time,
+                update_temp_display,
             ),
         );
     }
@@ -27,6 +28,20 @@ fn track_active_wall_time(
 ) {
     if !sim_state.paused {
         active_wall_time.0 += time.delta_secs();
+    }
+}
+
+fn update_temp_display(
+    thermostat: Res<Thermostat>,
+    current_temp: Res<CurrentTemperature>,
+    thermostat_scale: Res<ThermostatScale>,
+    mut query: Query<&mut Text, With<TempDisplayText>>,
+) {
+    if let Ok(mut text) = query.single_mut() {
+        text.0 = format!(
+            "Temp: {:.1} K / {:.1} K\nScale: {:.6}",
+            current_temp.0, thermostat.target_temperature, thermostat_scale.0
+        );
     }
 }
 

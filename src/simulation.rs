@@ -1,6 +1,6 @@
 use super::core::*;
+use super::core::{CurrentTemperature, Thermostat, ThermostatScale};
 use bevy::prelude::*;
-
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PhysicsSet;
 
@@ -16,8 +16,10 @@ impl Plugin for SimulationPlugin {
                 calculate_bond_forces,
                 calculate_angle_forces,
                 calculate_non_bonded_forces,
+                sum_total_forces,
                 finish_velocity_update,
                 end_simulation_step,
+                apply_thermostat,
             )
                 .chain()
                 .in_set(PhysicsSet)
@@ -29,7 +31,46 @@ impl Plugin for SimulationPlugin {
 }
 fn reset_forces(mut query: Query<&mut Force>) {
     for mut force in &mut query {
-        force.0 = Vec3::ZERO;
+        *force = Force::default();
+    }
+}
+
+fn apply_thermostat(
+    mut query: Query<(&mut Velocity, &AtomType)>,
+    params: Res<SimulationParameters>,
+    thermostat: Res<Thermostat>,
+    mut current_temp_res: ResMut<CurrentTemperature>,
+    mut thermostat_scale_res: ResMut<ThermostatScale>,
+) {
+    let mut total_ke = 0.0;
+    let num_atoms = query.iter().len();
+    if num_atoms == 0 {
+        return;
+    }
+    for (velocity, atom_type) in &query {
+        total_ke += 0.5 * atom_type.mass() * velocity.length_squared();
+    }
+    // Degrees of Freedom: 3 for each atom, minus 3 for the center of mass motion.
+    let dof = (3 * num_atoms - 3) as f32;
+    // The ideal gas constant R in units compatible with your simulation: kJ/(mol·K)
+    const R: f32 = 0.0083144621;
+    if total_ke < 1e-9 {
+        return;
+    }
+    let current_temp = (2.0 * total_ke) / (dof * R);
+    current_temp_res.0 = current_temp;
+    if thermostat.target_temperature <= 0.0 {
+        return;
+    }
+    if current_temp < 1e-9 {
+        return;
+    }
+    let term_inside_sqrt =
+        1.0 + (params.dt / thermostat.tau) * ((thermostat.target_temperature / current_temp) - 1.0);
+    let scale = term_inside_sqrt.max(0.0).sqrt();
+    thermostat_scale_res.0 = scale;
+    for (mut velocity, _) in &mut query {
+        velocity.0 *= scale;
     }
 }
 
@@ -44,9 +85,7 @@ fn integrate_position_and_half_velocity(
     params: Res<SimulationParameters>,
 ) {
     for (mut transform, mut velocity, acceleration) in &mut query {
-        // Half-step velocity update
         velocity.0 += 0.5 * acceleration.0 * params.dt;
-        // Full-step position update
         transform.translation += velocity.0 * params.dt;
     }
 }
@@ -56,11 +95,8 @@ fn finish_velocity_update(
     params: Res<SimulationParameters>,
 ) {
     for (mut velocity, mut acceleration, force, atom_type) in &mut query {
-        // Calculate and store the new acceleration
-        let new_acceleration = force.0 / atom_type.mass();
-        // Complete the velocity update
+        let new_acceleration = force.total / atom_type.mass();
         velocity.0 += 0.5 * new_acceleration * params.dt;
-        // Store the new acceleration for the next step's position update
         acceleration.0 = new_acceleration;
     }
 }
@@ -78,10 +114,9 @@ fn calculate_non_bonded_forces(
         ],
     ) = combinations.fetch_next()
     {
-        // ignore non-bonded for 1-2 and 1-3
         let key = if e1 < e2 { (e1, e2) } else { (e2, e1) };
-        if excluded.0.contains(&key) {
-            // info!("Skipping non-bonded for {:?} and {:?}", e1, e2);
+        // Skip 1-2 pairs entirely
+        if excluded.one_two.contains(&key) {
             continue;
         }
         let vec = transform2.translation() - transform1.translation();
@@ -90,13 +125,6 @@ fn calculate_non_bonded_forces(
             continue;
         } // Avoid division by zero
         let r = r_sq.sqrt();
-
-        /*
-        info!(
-            "Non-bonded {:?}({:?}) - {:?}({:?}): r={:.6}",
-            e1, atom1, e2, atom2, r
-        );
-        */
 
         // Use atom-type specific parameters with Lorentz-Berthelot mixing rules
         let epsilon = (atom1.epsilon() * atom2.epsilon()).sqrt();
@@ -115,13 +143,20 @@ fn calculate_non_bonded_forces(
         // -- Electrostatics (Coulomb's Law) --
         let q1 = atom1.charge();
         let q2 = atom2.charge();
-        let coulomb_force_mag = force_field.coulomb_k * q1 * q2 / r_sq;
+
+        let coulomb_scale = if excluded.one_three.contains(&key) {
+            0.5 // Scaling factor for 1-3 pairs
+        } else {
+            1.0 // Full strength for other pairs
+        };
+
+        let coulomb_force_mag = force_field.coulomb_k * q1 * q2 / r_sq * coulomb_scale;
 
         let total_force_mag = lj_force_mag + coulomb_force_mag;
         let force_vec = vec.normalize_or_zero() * total_force_mag;
 
-        force1.0 -= force_vec;
-        force2.0 += force_vec;
+        force1.non_bonded -= force_vec;
+        force2.non_bonded += force_vec;
 
         /*
         info!(
@@ -129,6 +164,12 @@ fn calculate_non_bonded_forces(
             lj_force_mag, coulomb_force_mag
         );
          */
+    }
+}
+
+fn sum_total_forces(mut query: Query<&mut Force>) {
+    for mut force in &mut query {
+        force.total = force.bond + force.angle + force.non_bonded;
     }
 }
 
@@ -188,21 +229,10 @@ fn calculate_angle_forces(
 
             let force_on_1 = force1_dir * force_magnitude;
             let force_on_2 = force2_dir * force_magnitude;
-            f1.0 += force_on_1;
-            f2.0 += force_on_2;
-            f_center.0 -= force_on_1 + force_on_2;
+            f1.angle += force_on_1;
+            f2.angle += force_on_2;
+            f_center.angle -= force_on_1 + force_on_2;
         }
-
-        /*
-        info!(
-            "Angle {:?}-{:?}-{:?}: θ={:.2}°, Δθ={:.2}°, F={:.6}",
-            angle.a,
-            angle.center,
-            angle.b,
-            theta.to_degrees(),
-            (theta - force_field.angle_theta0).to_degrees(),
-            force_magnitude
-        );  */
     }
 }
 
@@ -223,18 +253,8 @@ fn calculate_bond_forces(
             let r = vec.length();
             let force_magnitude = -bond_k * (r - bond_r0);
             let force_vec = vec.normalize_or_zero() * force_magnitude;
-            f1.0 -= force_vec;
-            f2.0 += force_vec;
-            /*
-            info!(
-                "Bond {:?}-{:?}: r={:.6}, Δr={:.6}, F={:.6}",
-                bond.a,
-                bond.b,
-                r,
-                r - force_field.bond_r0,
-                force_magnitude
-            );
-             */
+            f1.bond -= force_vec;
+            f2.bond += force_vec;
         }
     }
 }

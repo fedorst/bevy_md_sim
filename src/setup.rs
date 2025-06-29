@@ -8,6 +8,9 @@ use std::collections::HashSet;
 pub struct PauseText;
 
 #[derive(Component)]
+pub struct TempDisplayText;
+
+#[derive(Component)]
 pub struct TimeDisplayText;
 
 pub struct SetupPlugin;
@@ -64,6 +67,24 @@ fn setup(
         TextColor(Color::WHITE),
         // Add our new marker
         TimeDisplayText,
+    ));
+
+    commands.spawn((
+        Text::new("Temp: ..."), // Initial text
+        Node {
+            position_type: PositionType::Absolute,
+            // Position it below the other text element (10px top + 70px height approx)
+            top: Val::Px(80.0),
+            left: Val::Px(10.0),
+            ..default()
+        },
+        TextFont {
+            font_size: 20.0,
+            ..default()
+        },
+        TextColor(Color::WHITE),
+        // Add our new marker
+        TempDisplayText,
     ));
 
     let c_mesh = meshes.add(Sphere::new(0.07));
@@ -161,7 +182,9 @@ fn setup(
 }
 
 fn build_exclusions(mut commands: Commands, connectivity: Res<SystemConnectivity>) {
-    let mut excluded = HashSet::new();
+    let mut one_two = HashSet::new();
+    let mut one_three = HashSet::new();
+
     // filter out direct bonds from non-bonded interactions
     for bond in &connectivity.bonds {
         let key = if bond.a < bond.b {
@@ -169,7 +192,7 @@ fn build_exclusions(mut commands: Commands, connectivity: Res<SystemConnectivity
         } else {
             (bond.b, bond.a)
         };
-        excluded.insert(key);
+        one_two.insert(key);
     }
 
     // THIS IS THE FIX: Correctly add all 1-3 pairs (from angles)
@@ -180,8 +203,12 @@ fn build_exclusions(mut commands: Commands, connectivity: Res<SystemConnectivity
         } else {
             (angle.b, angle.a)
         };
-        excluded.insert(key);
+        one_three.insert(key);
     }
-    info!("Built exclusion list with {} pairs.", excluded.len());
-    commands.insert_resource(ExcludedPairs(excluded));
+    info!(
+        "Built exclusion lists: {} 1-2 pairs, {} 1-3 pairs",
+        one_two.len(),
+        one_three.len()
+    );
+    commands.insert_resource(ExcludedPairs { one_two, one_three });
 }
