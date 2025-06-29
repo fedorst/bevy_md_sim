@@ -1,0 +1,12 @@
+{
+  "name": "Water",
+  "atoms": [
+    { "id": "O1", "type": "Oxygen", "pos": [0.0, 0.0, 0.0] },
+    { "id": "H1", "type": "Hydrogen", "pos": [0.0, 0.0945, 0.0] },
+    { "id": "H2", "type": "Hydrogen", "pos": [0.0818, -0.04725, 0.0] }
+  ],
+  "bonds": [
+    ["O1", "H1"],
+    ["O1", "H2"]
+  ]
+}

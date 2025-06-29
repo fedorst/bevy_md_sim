@@ -1,3 +1,4 @@
+mod config;
 mod core;
 mod debug;
 mod setup;
@@ -7,7 +8,12 @@ mod visualization;
 
 use bevy::prelude::*;
 use bevy_panorbit_camera::PanOrbitCameraPlugin;
+use clap::Parser;
 use core::CorePlugin;
+use core::MoleculeSelection; // Import our new resource
+use core::SimulationParameters;
+use core::SimulationState;
+use core::Thermostat;
 use debug::DebugPlugin;
 use setup::SetupPlugin;
 use simulation::SimulationPlugin;
@@ -29,9 +35,45 @@ use visualization::VisualizationPlugin;
 // | 6 | **Add Atoms from a Sidebar** | To Do | **HIGH** | This is a major feature requiring significant UI work (e.g., `bevy_egui`) and new spawning/state management logic. |
 // | 11| **Playback System** | To Do | **HIGH** | Involves serializing the entire system state each frame and building a separate playback mode and UI. Very complex. |
 
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct CliArgs {
+    /// The name of the molecule to load from the assets/molecules/{molecule}.json.
+    #[arg(short, long, default_value = "ethanol")]
+    molecule: String,
+
+    /// step length in picoseconds.
+    #[arg(long, default_value_t = 1e-4)]
+    dt: f32,
+
+    /// Target temperature in Kelvin.
+    #[arg(long, default_value_t = 300.0)]
+    temp: f32,
+
+    /// Thermostat coupling time constant (tau) in picoseconds.
+    #[arg(long, default_value_t = 0.001)]
+    tau: f32,
+
+    /// Start the simulation in a paused state.
+    #[arg(long, default_value_t = false)]
+    paused: bool,
+}
+
 fn main() {
+    let args = CliArgs::parse();
+    info!("CLI arguments parsed. Loading molecule: {}", args.molecule);
+
     App::new()
         .add_plugins(DefaultPlugins)
+        .insert_resource(MoleculeSelection(args.molecule))
+        .insert_resource(SimulationParameters { dt: args.dt })
+        .insert_resource(Thermostat {
+            target_temperature: args.temp,
+            tau: args.tau,
+        })
+        .insert_resource(SimulationState {
+            paused: args.paused,
+        })
         .add_plugins((
             PanOrbitCameraPlugin,
             CorePlugin,
@@ -43,86 +85,3 @@ fn main() {
         ))
         .run();
 }
-
-/*
-fn main() {
-    App::new()
-        .add_plugins(DefaultPlugins)
-        .init_resource::<ForceField>() // Add our constants as a resource
-        .init_resource::<SystemConnectivity>()
-        .init_resource::<StepSimulation>()
-        .insert_resource(SimulationParameters { dt: 1e-4 })
-        .init_resource::<StepCount>()
-        .init_resource::<SimulationState>()
-        .add_systems(Startup, (setup, build_exclusions, run_once).chain())
-        .add_systems(
-            Update,
-            (
-                // debug_state,
-                // --- VERLET STEP 1: Update positions and half-step velocity ---
-                integrate_position_and_half_velocity,
-                // --- VERLET STEP 2: Calculate new forces based on new positions ---
-                reset_forces,
-                calculate_bond_forces,
-                calculate_angle_forces,
-                calculate_non_bonded_forces,
-                // log_total_forces,
-                // --- VERLET STEP 3: Complete the velocity update with new forces ---
-                finish_velocity_update,
-                // integrate_position,
-                // update_velocity,
-                update_bond_visuals,
-                end_simulation_step,
-            )
-                .chain()
-                .run_if(resource_equals(StepSimulation(true))),
-        )
-        .add_systems(
-            Update,
-            (
-                handle_simulation_control,
-                continuous_simulation,
-                update_pause_text,
-            ),
-        )
-        .run();
-}
-
-fn debug_state(
-    query: Query<(Entity, &AtomType, &Transform)>,
-    connectivity: Res<SystemConnectivity>,
-) {
-    info!("--- CURRENT STATE ---");
-    // This is a bit more complex now, but it's the correct "Bevy way".
-    // We need to find the entities from our connectivity resource.
-    let o_entity = connectivity.bonds[0].a;
-    let h1_entity = connectivity.bonds[0].b;
-    let h2_entity = connectivity.bonds[1].b;
-
-    // Use the query to get the transform data.
-    let o_pos = query.get(o_entity).unwrap().2.translation;
-    let h1_pos = query.get(h1_entity).unwrap().2.translation;
-    let h2_pos = query.get(h2_entity).unwrap().2.translation;
-
-    info!("Oxygen at: {:?}", o_pos);
-    info!("Hydrogen 1 at: {:?}", h1_pos);
-    info!("Hydrogen 2 at: {:?}", h2_pos);
-    info!("Distance O-H1: {}", o_pos.distance(h1_pos));
-    info!("Distance O-H2: {}", o_pos.distance(h2_pos));
-    info!("---------------------------------\n");
-}
-
-fn log_total_forces(query: Query<(&Force, &AtomType)>) {
-    let mut total_force = Vec3::ZERO;
-    for (force, atom_type) in &query {
-        total_force += force.0;
-        info!(
-            "Atom {:?}: F={:?} (|F|={:.6})",
-            atom_type,
-            force.0,
-            force.0.length()
-        );
-    }
-    info!("TOTAL SYSTEM FORCE: {:?}", total_force);
-}
- */

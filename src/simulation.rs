@@ -200,28 +200,6 @@ fn calculate_angle_forces(
             let v2 = t2.translation - t_center.translation;
             let theta = v1.angle_between(v2);
 
-            // --- START OF DEBUG CHANGES ---
-
-            // Check if this is the C-C-O angle we're interested in.
-            // Using a simple tuple check is sufficient here.
-            let is_target_angle = (*type1, *type_center, *type2)
-                == (AtomType::Carbon, AtomType::Carbon, AtomType::Oxygen)
-                || (*type1, *type_center, *type2)
-                    == (AtomType::Oxygen, AtomType::Carbon, AtomType::Carbon);
-
-            let force_magnitude = -angle_k * (theta - angle_theta0);
-
-            if is_target_angle {
-                info!(
-                    "C-C-O ANGLE DEBUG | Current: {:.2}°, Target: {:.2}°, Diff: {:.2}°, k: {}, Force Mag: {:.4}",
-                    theta.to_degrees(),
-                    angle_theta0.to_degrees(),
-                    (theta - angle_theta0).to_degrees(),
-                    angle_k,
-                    force_magnitude
-                );
-            }
-
             let force_magnitude = -angle_k * (theta - angle_theta0);
 
             let force1_dir = v1.cross(v1.cross(v2)).normalize_or_zero();

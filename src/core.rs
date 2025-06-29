@@ -57,6 +57,9 @@ pub struct SimulationParameters {
     pub dt: f32, // picoseconds
 }
 
+#[derive(Resource)]
+pub struct MoleculeSelection(pub String);
+
 #[derive(Resource, Default)]
 pub struct SimulationState {
     pub paused: bool,
@@ -201,14 +204,9 @@ impl Plugin for CorePlugin {
         app.init_resource::<ForceField>()
             .init_resource::<SystemConnectivity>()
             .init_resource::<StepSimulation>()
-            .insert_resource(SimulationParameters { dt: 1e-4 })
             .init_resource::<StepCount>()
             .init_resource::<SimulationState>()
             .init_resource::<ActiveWallTime>()
-            .insert_resource(Thermostat {
-                target_temperature: 300.0, // Room temperature
-                tau: 0.001,                // A fairly strong coupling
-            })
             .init_resource::<ThermostatScale>()
             .init_resource::<CurrentTemperature>()
             .init_resource::<ExcludedPairs>();
