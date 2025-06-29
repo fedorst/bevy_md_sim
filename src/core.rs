@@ -165,6 +165,9 @@ pub struct Acceleration(pub Vec3);
 #[derive(Resource, Default)]
 pub struct ExcludedPairs(pub HashSet<(Entity, Entity)>);
 
+#[derive(Resource, Default, Deref, DerefMut)]
+pub struct ActiveWallTime(pub f32);
+
 pub struct CorePlugin;
 
 impl Plugin for CorePlugin {
@@ -172,9 +175,10 @@ impl Plugin for CorePlugin {
         app.init_resource::<ForceField>()
             .init_resource::<SystemConnectivity>()
             .init_resource::<StepSimulation>()
-            .insert_resource(SimulationParameters { dt: 3e-5 })
+            .insert_resource(SimulationParameters { dt: 1e-5 })
             .init_resource::<StepCount>()
             .init_resource::<SimulationState>()
+            .init_resource::<ActiveWallTime>()
             .init_resource::<ExcludedPairs>();
     }
 }

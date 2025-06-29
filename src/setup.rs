@@ -1,11 +1,14 @@
 use super::core::*;
 use bevy::prelude::*;
 use bevy::ui::{PositionType, Val};
+use bevy_panorbit_camera::PanOrbitCamera;
 use std::collections::HashSet;
+
 #[derive(Component)]
 pub struct PauseText;
 
-use bevy_panorbit_camera::PanOrbitCamera;
+#[derive(Component)]
+pub struct TimeDisplayText;
 
 pub struct SetupPlugin;
 
@@ -44,6 +47,23 @@ fn setup(
         }, // Add font component
         TextColor(Color::WHITE), // Add color component
         PauseText,               // Add our marker
+    ));
+
+    commands.spawn((
+        Text::new("Time: ..."), // Initial text
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(10.0),
+            left: Val::Px(10.0),
+            ..default()
+        },
+        TextFont {
+            font_size: 20.0, // A bit smaller
+            ..default()
+        },
+        TextColor(Color::WHITE),
+        // Add our new marker
+        TimeDisplayText,
     ));
 
     let c_mesh = meshes.add(Sphere::new(0.07));

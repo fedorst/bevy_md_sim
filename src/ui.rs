@@ -1,5 +1,5 @@
 use super::core::*;
-use super::setup::PauseText; // Use the public marker component
+use super::setup::{PauseText, TimeDisplayText}; // Use the public marker component
 use bevy::prelude::*;
 
 pub struct UIPlugin;
@@ -13,8 +13,20 @@ impl Plugin for UIPlugin {
                 handle_simulation_control,
                 continuous_simulation,
                 update_pause_text,
+                update_time_display,
+                track_active_wall_time,
             ),
         );
+    }
+}
+
+fn track_active_wall_time(
+    time: Res<Time>,
+    sim_state: Res<SimulationState>,
+    mut active_wall_time: ResMut<ActiveWallTime>,
+) {
+    if !sim_state.paused {
+        active_wall_time.0 += time.delta_secs();
     }
 }
 
@@ -41,6 +53,22 @@ fn update_pause_text(state: Res<SimulationState>, mut query: Query<&mut Text, Wi
                 "RUNNING".to_string()
             };
         }
+    }
+}
+
+fn update_time_display(
+    active_wall_time: Res<ActiveWallTime>,
+    step_count: Res<StepCount>,
+    params: Res<SimulationParameters>,
+    mut query: Query<&mut Text, With<TimeDisplayText>>,
+) {
+    if let Ok(mut text) = query.single_mut() {
+        // `dt` is in picoseconds (ps)?
+        let simulated_time_ps = step_count.0 as f32 * params.dt;
+        text.0 = format!(
+            "Sim Time: {:.3} ps\nWall Time: {:.2} s\nSteps: {:}",
+            simulated_time_ps, active_wall_time.0, step_count.0
+        );
     }
 }
 

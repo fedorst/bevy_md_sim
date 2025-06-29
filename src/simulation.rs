@@ -11,24 +11,19 @@ impl Plugin for SimulationPlugin {
         app.add_systems(
             Update,
             (
-                (
-                    integrate_position_and_half_velocity,
-                    reset_forces,
-                    calculate_bond_forces,
-                    calculate_angle_forces,
-                    calculate_non_bonded_forces,
-                    finish_velocity_update,
-                    end_simulation_step,
-                )
-                    .chain()
-                    .in_set(PhysicsSet)
-                    .run_if(
-                        |state: Res<SimulationState>, step: Res<StepSimulation>| {
-                            !state.paused || step.0
-                        },
-                    ),
-                end_simulation_step.after(PhysicsSet),
-            ),
+                integrate_position_and_half_velocity,
+                reset_forces,
+                calculate_bond_forces,
+                calculate_angle_forces,
+                calculate_non_bonded_forces,
+                finish_velocity_update,
+                end_simulation_step,
+            )
+                .chain()
+                .in_set(PhysicsSet)
+                .run_if(|state: Res<SimulationState>, step: Res<StepSimulation>| {
+                    !state.paused || step.0
+                }),
         );
     }
 }
@@ -163,6 +158,29 @@ fn calculate_angle_forces(
             let v1 = t1.translation - t_center.translation;
             let v2 = t2.translation - t_center.translation;
             let theta = v1.angle_between(v2);
+
+            // --- START OF DEBUG CHANGES ---
+
+            // Check if this is the C-C-O angle we're interested in.
+            // Using a simple tuple check is sufficient here.
+            let is_target_angle = (*type1, *type_center, *type2)
+                == (AtomType::Carbon, AtomType::Carbon, AtomType::Oxygen)
+                || (*type1, *type_center, *type2)
+                    == (AtomType::Oxygen, AtomType::Carbon, AtomType::Carbon);
+
+            let force_magnitude = -angle_k * (theta - angle_theta0);
+
+            if is_target_angle {
+                info!(
+                    "C-C-O ANGLE DEBUG | Current: {:.2}°, Target: {:.2}°, Diff: {:.2}°, k: {}, Force Mag: {:.4}",
+                    theta.to_degrees(),
+                    angle_theta0.to_degrees(),
+                    (theta - angle_theta0).to_degrees(),
+                    angle_k,
+                    force_magnitude
+                );
+            }
+
             let force_magnitude = -angle_k * (theta - angle_theta0);
 
             let force1_dir = v1.cross(v1.cross(v2)).normalize_or_zero();

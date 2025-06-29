@@ -14,23 +14,20 @@ use simulation::SimulationPlugin;
 use ui::UIPlugin;
 use visualization::VisualizationPlugin;
 
-/*
- * further ideas
- * 1. select atoms by dragging across the viewport (green rectangle). mabye some examples exist.
- * 2. selected atoms display their forces using https://bevy.org/examples/gizmos/axes/ : aggregate force direction and magnitude. and also same for velocity? in a different color
- * 3. can press del to delete selected atoms
- * 4. if a single atom is selected, it is draggable using axis helpers
- * 5. proper orbital camera is a requirement then, i guess. there should be some examples...
- * 6. in a sidebar, i can add new atoms to the scene. and then drag them
- * 7. if i shift+select 2 atoms, i should be able to create a bond by pressing b. if one already exists between them, pressing b will remove it
- * 8. also make it possible to have a carbon atom
- * 9. also make it possible to have a double bond
- * 10. Also make it possible to have a nitrogen atom
- * 11. make playback of already-simulated stuff possible. with a play button or sth. record all intermediate states per each frame.
- * 12. i understand that not all of this is immediately doable. lets focus on what creates most value with least effort and prioritize our efforts accordingly.
- * 13. further UI improvements
- * 14. display total force or enthalpy of selected system.
- */
+// | ID | Feature | Status | Effort | Notes |
+// | :--- | :--- | :--- | :--- | :--- |
+// | 10 | **Add Nitrogen Atom** | 💡 **NEXT UP** | **LOW** | Easy to implement. Just requires adding to the `AtomType` enum and finding/adding its force field parameters. Great "quick win". |
+// | 14 | **Display Total System Energy** | 💡 **NEXT UP** | **LOW** | Huge value for simulation stability! A new system to sum kinetic & potential energy is straightforward and can be displayed in a new UI text element. |
+// | 3 | **Delete Selected Atom** | 💡 **NEXT UP** | **MEDIUM** | Very satisfying interactive feature. The core is just `commands.despawn()`. The "medium" effort comes from needing to carefully remove the atom's bonds/angles from `SystemConnectivity` to prevent crashes. |
+// | --- | | | | |
+// | 7 | **Create/Delete Bonds (Shift+Select)**| To Do | **MEDIUM** | Involves managing multi-selection state, checking for key modifiers, and editing `SystemConnectivity`. A great next step for interactivity. |
+// | 9 | **Implement Double Bonds** | To Do | **MEDIUM** | This is more of a core simulation feature. It requires changing `Bond` data structures and the force calculation logic. |
+// | 13 | **Further UI Improvements** | To Do | **MEDIUM** | A good example would be adding buttons for "Pause/Play" or "Reset Simulation" instead of using keyboard-only controls. |
+// | --- | | | | |
+// | 1 | **Marquee (Rectangle) Select** | To Do | **HIGH** | Requires complex logic for 2D-to-3D space conversion, managing a selection box, and checking many entities against it. |
+// | 4 | **Draggable Atoms** | To Do | **HIGH** | Requires implementing a 3D translation gizmo or integrating a library for it, which is a significant task. |
+// | 6 | **Add Atoms from a Sidebar** | To Do | **HIGH** | This is a major feature requiring significant UI work (e.g., `bevy_egui`) and new spawning/state management logic. |
+// | 11| **Playback System** | To Do | **HIGH** | Involves serializing the entire system state each frame and building a separate playback mode and UI. Very complex. |
 
 fn main() {
     App::new()
