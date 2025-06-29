@@ -7,6 +7,7 @@ pub enum ConfigAtomType {
     Oxygen,
     Hydrogen,
     Carbon,
+    Nitrogen,
 }
 
 impl From<ConfigAtomType> for AtomType {
@@ -15,6 +16,7 @@ impl From<ConfigAtomType> for AtomType {
             ConfigAtomType::Oxygen => AtomType::Oxygen,
             ConfigAtomType::Hydrogen => AtomType::Hydrogen,
             ConfigAtomType::Carbon => AtomType::Carbon,
+            ConfigAtomType::Nitrogen => AtomType::Nitrogen,
         }
     }
 }

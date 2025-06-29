@@ -6,6 +6,7 @@ pub enum AtomType {
     Oxygen,
     Hydrogen,
     Carbon,
+    Nitrogen,
 }
 
 impl AtomType {
@@ -14,6 +15,7 @@ impl AtomType {
             AtomType::Oxygen => 15.999,
             AtomType::Hydrogen => 1.0,
             AtomType::Carbon => 12.011,
+            AtomType::Nitrogen => 14.007, // NEW
         }
     }
     pub fn charge(&self) -> f32 {
@@ -24,6 +26,12 @@ impl AtomType {
             // For now, we'll use a simplified model and assign an "average" charge. TODO
             // A more advanced system would have more AtomTypes (e.g., C_CH3, H_CH3).
             AtomType::Carbon => -0.1,
+            // OPLS-AA charge for an amine nitrogen
+            AtomType::Nitrogen => -1.05,
+            // NOTE: The hydrogens on this nitrogen have a different charge
+            // than the hydrogens on oxygen. This highlights the need for a
+            // more advanced "atom type name" system later, but for now,
+            // we will use the existing Hydrogen charge as an approximation.
         }
     }
     pub fn epsilon(&self) -> f32 {
@@ -32,6 +40,7 @@ impl AtomType {
             Self::Oxygen => 0.71128,
             Self::Hydrogen => 0.19246,
             Self::Carbon => 0.27614,
+            Self::Nitrogen => 0.71128,
         }
     }
     pub fn sigma(&self) -> f32 {
@@ -39,6 +48,7 @@ impl AtomType {
             Self::Oxygen => 0.3166,
             Self::Hydrogen => 0.225,
             Self::Carbon => 0.350,
+            Self::Nitrogen => 0.325,
         }
     }
 }
@@ -127,6 +137,12 @@ impl Default for ForceField {
         // O-H bond
         bond_params.insert((AtomType::Oxygen, AtomType::Hydrogen), (462750.4, 0.0945));
         bond_params.insert((AtomType::Hydrogen, AtomType::Oxygen), (462750.4, 0.0945));
+        // C-N bond
+        bond_params.insert((AtomType::Carbon, AtomType::Nitrogen), (334720.0, 0.147));
+        bond_params.insert((AtomType::Nitrogen, AtomType::Carbon), (334720.0, 0.147));
+        // N-H bond
+        bond_params.insert((AtomType::Nitrogen, AtomType::Hydrogen), (389112.0, 0.101));
+        bond_params.insert((AtomType::Hydrogen, AtomType::Nitrogen), (389112.0, 0.101));
 
         let mut angle_params = HashMap::new();
         // C-C-H angle
@@ -160,6 +176,26 @@ impl Default for ForceField {
         angle_params.insert(
             (AtomType::Hydrogen, AtomType::Oxygen, AtomType::Carbon),
             (460.24, 108.5f32.to_radians()),
+        );
+
+        // C-N-H angle
+        angle_params.insert(
+            (AtomType::Carbon, AtomType::Nitrogen, AtomType::Hydrogen),
+            (292.88, 109.5f32.to_radians()),
+        );
+        angle_params.insert(
+            (AtomType::Hydrogen, AtomType::Nitrogen, AtomType::Carbon),
+            (292.88, 109.5f32.to_radians()),
+        );
+        // H-N-H angle
+        angle_params.insert(
+            (AtomType::Hydrogen, AtomType::Nitrogen, AtomType::Hydrogen),
+            (292.88, 107.0f32.to_radians()),
+        );
+        // C-N-C angle
+        angle_params.insert(
+            (AtomType::Carbon, AtomType::Nitrogen, AtomType::Carbon),
+            (418.4, 112.0f32.to_radians()),
         );
 
         Self {

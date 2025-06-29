@@ -109,6 +109,7 @@ fn setup(
         (AtomType::Carbon, meshes.add(Sphere::new(0.07))),
         (AtomType::Oxygen, meshes.add(Sphere::new(0.06))),
         (AtomType::Hydrogen, meshes.add(Sphere::new(0.04))),
+        (AtomType::Nitrogen, meshes.add(Sphere::new(0.065))),
     ]
     .into_iter()
     .collect::<HashMap<_, _>>();
@@ -129,6 +130,7 @@ fn setup(
                     AtomType::Carbon => Color::srgb(0.2, 0.2, 0.2),
                     AtomType::Oxygen => Color::srgb(1.0, 0.1, 0.1),
                     AtomType::Hydrogen => Color::srgb(0.9, 0.9, 0.9),
+                    AtomType::Nitrogen => Color::srgb(0.1, 0.1, 1.0),
                 })),
                 Transform::from_translation(Vec3::from(atom_spec.pos)),
             ))
