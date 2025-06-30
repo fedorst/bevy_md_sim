@@ -1,5 +1,5 @@
 use super::core::*;
-use super::setup::{PauseText, TempDisplayText, TimeDisplayText}; // Use the public marker component
+use super::setup::{EnergyDisplayText, PauseText, TempDisplayText, TimeDisplayText}; // Use the public marker component
 use bevy::prelude::*;
 
 pub struct UIPlugin;
@@ -16,7 +16,23 @@ impl Plugin for UIPlugin {
                 update_time_display,
                 track_active_wall_time,
                 update_temp_display,
+                update_energy_display,
             ),
+        );
+    }
+}
+
+fn update_energy_display(
+    energy: Res<SystemEnergy>,
+    mut query: Query<&mut Text, With<EnergyDisplayText>>,
+) {
+    if let Ok(mut text) = query.single_mut() {
+        text.0 = format!(
+            "--- Energy (kJ/mol) ---\n\
+             Total: {:.2}\n\
+             Potential: {:.2}\n\
+             Kinetic: {:.2}",
+            energy.total, energy.potential, energy.kinetic
         );
     }
 }

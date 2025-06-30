@@ -1,3 +1,5 @@
+use crate::core::{AtomType, Force, Velocity};
+use crate::simulation::PhysicsSet;
 use bevy::pbr::wireframe::{Wireframe, WireframePlugin};
 use bevy::prelude::*;
 use bevy::ui::widget::TextUiWriter;
@@ -6,8 +8,6 @@ use bevy_picking::{
     events::{Click, Pointer},
     hover::PickingInteraction,
 };
-
-use crate::core::{AtomType, Force, Velocity};
 
 use bevy::color::palettes::basic::{BLACK, BLUE, RED, YELLOW};
 
@@ -22,7 +22,7 @@ impl Plugin for DebugPlugin {
             .add_observer(handle_selection)
             .add_systems(
                 Update,
-                (update_highlights, update_info_panel, draw_selection_gizmos),
+                (update_highlights, update_info_panel, draw_selection_gizmos).after(PhysicsSet),
             );
     }
 }

@@ -93,6 +93,13 @@ pub struct Angle {
     pub b: Entity,
 }
 
+#[derive(Resource, Default, Debug, Clone, Copy)]
+pub struct SystemEnergy {
+    pub potential: f32,
+    pub kinetic: f32,
+    pub total: f32,
+}
+
 // A global resource that stores all bonds and angles in the system.
 #[derive(Resource, Default)]
 pub struct SystemConnectivity {
@@ -244,6 +251,7 @@ impl Plugin for CorePlugin {
             .init_resource::<SimulationState>()
             .init_resource::<ActiveWallTime>()
             .init_resource::<ThermostatScale>()
+            .init_resource::<SystemEnergy>()
             .init_resource::<CurrentTemperature>()
             .init_resource::<ExcludedPairs>();
     }

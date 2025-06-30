@@ -1,5 +1,5 @@
 use super::core::*;
-use super::core::{CurrentTemperature, Thermostat, ThermostatScale};
+use super::core::{CurrentTemperature, SystemEnergy, Thermostat, ThermostatScale};
 use bevy::prelude::*;
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PhysicsSet;
@@ -13,13 +13,15 @@ impl Plugin for SimulationPlugin {
             (
                 integrate_position_and_half_velocity,
                 reset_forces,
+                reset_energy,
                 calculate_bond_forces,
                 calculate_angle_forces,
                 calculate_non_bonded_forces,
                 sum_total_forces,
                 finish_velocity_update,
-                end_simulation_step,
                 apply_thermostat,
+                calculate_kinetic_energy,
+                end_simulation_step,
             )
                 .chain()
                 .in_set(PhysicsSet)
@@ -105,6 +107,7 @@ fn calculate_non_bonded_forces(
     mut query: Query<(Entity, &AtomType, &GlobalTransform, &mut Force)>,
     force_field: Res<ForceField>,
     excluded: Res<ExcludedPairs>,
+    mut energy: ResMut<SystemEnergy>,
 ) {
     let mut combinations = query.iter_combinations_mut();
     while let Some(
@@ -121,9 +124,9 @@ fn calculate_non_bonded_forces(
         }
         let vec = transform2.translation() - transform1.translation();
         let r_sq = vec.length_squared();
-        if r_sq < 0.0001 {
+        if r_sq < 1e-6 {
             continue;
-        } // Avoid division by zero
+        }
         let r = r_sq.sqrt();
 
         // Use atom-type specific parameters with Lorentz-Berthelot mixing rules
@@ -135,6 +138,9 @@ fn calculate_non_bonded_forces(
             let sigma_over_r = sigma / r;
             let sigma_over_r_6 = sigma_over_r.powi(6);
             let sigma_over_r_12 = sigma_over_r_6.powi(2);
+            // LJ Potential: E = 4 * epsilon * [(sigma/r)^12 - (sigma/r)^6]
+
+            energy.potential += 4.0 * epsilon * (sigma_over_r_12 - sigma_over_r_6);
             (24.0 * epsilon / r) * (2.0 * sigma_over_r_12 - sigma_over_r_6)
         } else {
             0.0 // Skip LJ calculation if either atom has epsilon=0
@@ -149,22 +155,31 @@ fn calculate_non_bonded_forces(
         } else {
             1.0 // Full strength for other pairs
         };
+        energy.potential += coulomb_scale * force_field.coulomb_k * (q1 * q2 / r);
 
         let coulomb_force_mag = force_field.coulomb_k * q1 * q2 / r_sq * coulomb_scale;
-
         let total_force_mag = lj_force_mag + coulomb_force_mag;
         let force_vec = vec.normalize_or_zero() * total_force_mag;
 
         force1.non_bonded -= force_vec;
         force2.non_bonded += force_vec;
-
-        /*
-        info!(
-            "  LJ: F={:.6}, Coulomb: F={:.6}",
-            lj_force_mag, coulomb_force_mag
-        );
-         */
     }
+}
+
+fn reset_energy(mut energy: ResMut<SystemEnergy>) {
+    *energy = SystemEnergy::default();
+}
+
+fn calculate_kinetic_energy(
+    mut energy: ResMut<SystemEnergy>,
+    query: Query<(&AtomType, &Velocity)>,
+) {
+    let mut kinetic_energy = 0.0;
+    for (atom_type, velocity) in &query {
+        kinetic_energy += 0.5 * atom_type.mass() * velocity.length_squared();
+    }
+    energy.kinetic = kinetic_energy;
+    energy.total = energy.potential + energy.kinetic;
 }
 
 fn sum_total_forces(mut query: Query<&mut Force>) {
@@ -178,6 +193,7 @@ fn calculate_angle_forces(
     connectivity: Res<SystemConnectivity>,
     mut atom_query: Query<(&Transform, &mut Force, &AtomType)>,
     force_field: Res<ForceField>,
+    mut energy: ResMut<SystemEnergy>,
 ) {
     for angle in &connectivity.angles {
         let Ok(
@@ -210,6 +226,8 @@ fn calculate_angle_forces(
             f1.angle += force_on_1;
             f2.angle += force_on_2;
             f_center.angle -= force_on_1 + force_on_2;
+
+            energy.potential += 0.5 * angle_k * (theta - angle_theta0).powi(2);
         }
     }
 }
@@ -218,6 +236,7 @@ fn calculate_bond_forces(
     connectivity: Res<SystemConnectivity>,
     mut atom_query: Query<(&Transform, &mut Force, &AtomType)>,
     force_field: Res<ForceField>,
+    mut energy: ResMut<SystemEnergy>,
 ) {
     for bond in &connectivity.bonds {
         let Ok([(t1, mut f1, type1), (t2, mut f2, type2)]) =
@@ -233,6 +252,8 @@ fn calculate_bond_forces(
             let force_vec = vec.normalize_or_zero() * force_magnitude;
             f1.bond -= force_vec;
             f2.bond += force_vec;
+            // for accum
+            energy.potential += 0.5 * bond_k * (r - bond_r0).powi(2);
         }
     }
 }

@@ -9,6 +9,9 @@ use std::collections::{HashMap, HashSet};
 pub struct PauseText;
 
 #[derive(Component)]
+pub struct EnergyDisplayText;
+
+#[derive(Component)]
 pub struct TempDisplayText;
 
 #[derive(Component)]
@@ -84,6 +87,24 @@ fn setup(
         },
         TextColor(Color::WHITE),
         TempDisplayText,
+    ));
+
+    commands.spawn((
+        Text::new("Energy: ..."),
+        Node {
+            position_type: PositionType::Absolute,
+            // Position it below the temperature display
+            top: Val::Px(130.0),
+            left: Val::Px(10.0),
+            width: Val::Px(250.0),
+            ..default()
+        },
+        TextFont {
+            font_size: 16.0,
+            ..default()
+        },
+        TextColor(Color::WHITE),
+        EnergyDisplayText,
     ));
 
     info!("Loading molecule from config file...");

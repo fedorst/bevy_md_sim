@@ -22,7 +22,6 @@ use visualization::VisualizationPlugin;
 
 // | ID | Feature | Status | Effort | Notes |
 // | :--- | :--- | :--- | :--- | :--- |
-// | 10 | **Add Nitrogen Atom** | 💡 **NEXT UP** | **LOW** | Easy to implement. Just requires adding to the `AtomType` enum and finding/adding its force field parameters. Great "quick win". |
 // | 14 | **Display Total System Energy** | 💡 **NEXT UP** | **LOW** | Huge value for simulation stability! A new system to sum kinetic & potential energy is straightforward and can be displayed in a new UI text element. |
 // | 3 | **Delete Selected Atom** | 💡 **NEXT UP** | **MEDIUM** | Very satisfying interactive feature. The core is just `commands.despawn()`. The "medium" effort comes from needing to carefully remove the atom's bonds/angles from `SystemConnectivity` to prevent crashes. |
 // | --- | | | | |
