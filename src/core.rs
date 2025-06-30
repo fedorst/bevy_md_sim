@@ -240,6 +240,11 @@ pub struct CurrentTemperature(pub f32);
 #[derive(Resource, Default, Deref, DerefMut)]
 pub struct ThermostatScale(pub f32);
 
+#[derive(Resource, Default)]
+pub struct AtomIdMap {
+    pub entity_to_id: HashMap<Entity, String>,
+}
+
 pub struct CorePlugin;
 
 impl Plugin for CorePlugin {
@@ -253,6 +258,7 @@ impl Plugin for CorePlugin {
             .init_resource::<ThermostatScale>()
             .init_resource::<SystemEnergy>()
             .init_resource::<CurrentTemperature>()
+            .init_resource::<AtomIdMap>()
             .init_resource::<ExcludedPairs>();
     }
 }

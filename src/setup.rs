@@ -31,6 +31,7 @@ fn setup(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut connectivity: ResMut<SystemConnectivity>,
     molecule_selection: Res<MoleculeSelection>,
+    mut atom_id_map_res: ResMut<AtomIdMap>,
 ) {
     commands.spawn((
         PanOrbitCamera::default(),
@@ -107,6 +108,8 @@ fn setup(
         EnergyDisplayText,
     ));
 
+    let mut id_to_entity_map: HashMap<String, Entity> = HashMap::new();
+
     info!("Loading molecule from config file...");
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
     let filename = format!("{}.json", molecule_selection.0);
@@ -159,6 +162,9 @@ fn setup(
 
         // Populate our ID-to-Entity map.
         id_to_entity_map.insert(atom_spec.id.clone(), entity);
+        atom_id_map_res
+            .entity_to_id
+            .insert(entity, atom_spec.id.clone());
     }
 
     // --- 2. Create bonds from the config file ---
