@@ -1,6 +1,5 @@
-use crate::core::{
-    AtomIdMap, AtomType, BondVisualization, Force, ForceField, SystemConnectivity, Velocity,
-};
+use crate::components::{AtomType, BondVisualization, Force, Velocity};
+use crate::resources::{AtomIdMap, ForceField, SystemConnectivity};
 use crate::simulation::PhysicsSet;
 use bevy::color::palettes::basic::{BLACK, BLUE, RED};
 use bevy::prelude::*;
@@ -205,7 +204,6 @@ fn update_info_panel(
                 // Text is already set to default.
             }
             1 => {
-                // --- SINGLE ATOM DISPLAY (as before) ---
                 let entity = selection.selected[0];
                 if let Ok((atom_type, _transform, velocity, force)) = atom_query.get(entity) {
                     let pretty_id = atom_id_map.entity_to_id.get(&entity).unwrap();

@@ -1,70 +1,29 @@
+use crate::components::AtomType;
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
 
-#[derive(Component, Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub enum AtomType {
-    Oxygen,
-    Hydrogen,
-    Carbon,
-    Nitrogen,
+// data structures used by resources
+#[derive(Debug, Copy, Clone)]
+pub struct Bond {
+    pub a: Entity,
+    pub b: Entity,
 }
 
-impl AtomType {
-    pub fn mass(&self) -> f32 {
-        match self {
-            AtomType::Oxygen => 15.999,
-            AtomType::Hydrogen => 1.0,
-            AtomType::Carbon => 12.011,
-            AtomType::Nitrogen => 14.007, // NEW
-        }
-    }
-    pub fn charge(&self) -> f32 {
-        match self {
-            AtomType::Oxygen => -0.683,  // O in an alcohol
-            AtomType::Hydrogen => 0.418, // H bonded to the O
-            // We need to distinguish between carbons and their hydrogens.
-            // For now, we'll use a simplified model and assign an "average" charge. TODO
-            // A more advanced system would have more AtomTypes (e.g., C_CH3, H_CH3).
-            AtomType::Carbon => -0.1,
-            // OPLS-AA charge for an amine nitrogen
-            AtomType::Nitrogen => -1.05,
-            // NOTE: The hydrogens on this nitrogen have a different charge
-            // than the hydrogens on oxygen. This highlights the need for a
-            // more advanced "atom type name" system later, but for now,
-            // we will use the existing Hydrogen charge as an approximation.
-        }
-    }
-    pub fn epsilon(&self) -> f32 {
-        // OPLS-AA parameters (kJ/mol)
-        match self {
-            Self::Oxygen => 0.71128,
-            Self::Hydrogen => 0.19246,
-            Self::Carbon => 0.27614,
-            Self::Nitrogen => 0.71128,
-        }
-    }
-    pub fn sigma(&self) -> f32 {
-        match self {
-            Self::Oxygen => 0.3166,
-            Self::Hydrogen => 0.225,
-            Self::Carbon => 0.350,
-            Self::Nitrogen => 0.325,
-        }
-    }
+#[derive(Debug, Copy, Clone)]
+pub struct Angle {
+    pub a: Entity,
+    pub center: Entity,
+    pub b: Entity,
 }
 
-#[derive(Component)]
-pub struct BondVisualization {
-    pub atom1: Entity,
-    pub atom2: Entity,
-}
+// resources
 
 #[derive(Resource, Default, PartialEq, Eq, Clone, Copy, Debug)]
 pub struct StepSimulation(pub bool);
 
 #[derive(Resource)]
 pub struct SimulationParameters {
-    pub dt: f32, // picoseconds
+    pub dt: f32,
 }
 
 #[derive(Resource)]
@@ -78,21 +37,6 @@ pub struct SimulationState {
 #[derive(Resource, Default, Deref, DerefMut)]
 pub struct StepCount(pub u32);
 
-// A single bond between two atom entities.
-#[derive(Debug, Copy, Clone)]
-pub struct Bond {
-    pub a: Entity,
-    pub b: Entity,
-}
-
-// A single angle between three atom entities.
-#[derive(Debug, Copy, Clone)]
-pub struct Angle {
-    pub a: Entity,
-    pub center: Entity,
-    pub b: Entity,
-}
-
 #[derive(Resource, Default, Debug, Clone, Copy)]
 pub struct SystemEnergy {
     pub potential: f32,
@@ -100,31 +44,16 @@ pub struct SystemEnergy {
     pub total: f32,
 }
 
-// A global resource that stores all bonds and angles in the system.
 #[derive(Resource, Default)]
 pub struct SystemConnectivity {
     pub bonds: Vec<Bond>,
     pub angles: Vec<Angle>,
 }
 
-#[derive(Component, Default, Debug, Clone, Copy)]
-pub struct Force {
-    pub total: Vec3,
-    pub bond: Vec3,
-    pub angle: Vec3,
-    pub non_bonded: Vec3,
-}
-
-impl Force {
-    pub fn total_magnitude(&self) -> f32 {
-        self.total.length()
-    }
-}
-
 #[derive(Resource, Debug)]
 pub struct ForceField {
-    pub bond_params: HashMap<(AtomType, AtomType), (f32, f32)>, // (k, r0)
-    pub angle_params: HashMap<(AtomType, AtomType, AtomType), (f32, f32)>, // (k, theta0)
+    pub bond_params: HashMap<(AtomType, AtomType), (f32, f32)>,
+    pub angle_params: HashMap<(AtomType, AtomType, AtomType), (f32, f32)>,
     pub coulomb_k: f32,
 }
 
@@ -213,12 +142,6 @@ impl Default for ForceField {
     }
 }
 
-#[derive(Component, Deref, DerefMut, Debug)]
-pub struct Velocity(pub Vec3);
-
-#[derive(Component, Deref, DerefMut)]
-pub struct Acceleration(pub Vec3);
-
 #[derive(Resource, Default)]
 pub struct ExcludedPairs {
     pub one_two: HashSet<(Entity, Entity)>,   // Direct bonds (1-2)
@@ -243,22 +166,4 @@ pub struct ThermostatScale(pub f32);
 #[derive(Resource, Default)]
 pub struct AtomIdMap {
     pub entity_to_id: HashMap<Entity, String>,
-}
-
-pub struct CorePlugin;
-
-impl Plugin for CorePlugin {
-    fn build(&self, app: &mut App) {
-        app.init_resource::<ForceField>()
-            .init_resource::<SystemConnectivity>()
-            .init_resource::<StepSimulation>()
-            .init_resource::<StepCount>()
-            .init_resource::<SimulationState>()
-            .init_resource::<ActiveWallTime>()
-            .init_resource::<ThermostatScale>()
-            .init_resource::<SystemEnergy>()
-            .init_resource::<CurrentTemperature>()
-            .init_resource::<AtomIdMap>()
-            .init_resource::<ExcludedPairs>();
-    }
 }

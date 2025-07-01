@@ -1,4 +1,4 @@
-use crate::core::AtomType;
+use crate::components::AtomType;
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug, Copy, Clone, PartialEq, Eq, Hash)]

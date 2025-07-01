@@ -1,4 +1,4 @@
-use super::core::*;
+use super::resources::*;
 use super::setup::{EnergyDisplayText, PauseText, TempDisplayText, TimeDisplayText}; // Use the public marker component
 use bevy::prelude::*;
 

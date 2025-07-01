@@ -1,5 +1,5 @@
-use super::core::*;
-use super::core::{CurrentTemperature, SystemEnergy, Thermostat, ThermostatScale};
+use crate::components::{Acceleration, AtomType, Force, Velocity};
+use crate::resources::*;
 use bevy::prelude::*;
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PhysicsSet;

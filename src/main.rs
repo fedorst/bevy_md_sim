@@ -1,6 +1,7 @@
+mod components;
 mod config;
-mod core;
 mod debug;
+mod resources;
 mod setup;
 mod simulation;
 mod ui;
@@ -9,22 +10,16 @@ mod visualization;
 use bevy::prelude::*;
 use bevy_panorbit_camera::PanOrbitCameraPlugin;
 use clap::Parser;
-use core::CorePlugin;
-use core::MoleculeSelection; // Import our new resource
-use core::SimulationParameters;
-use core::SimulationState;
-use core::Thermostat;
 use debug::DebugPlugin;
+use resources::*; // Import all resourcesuse bevy_panorbit_camera::PanOrbitCameraPlugin;
 use setup::SetupPlugin;
 use simulation::SimulationPlugin;
 use ui::UIPlugin;
 use visualization::VisualizationPlugin;
-
+// We will create the CorePlugin here now, as it just initializes resources.
+use resources::{MoleculeSelection, SimulationParameters, SimulationState, Thermostat};
 // | ID | Feature | Status | Effort | Notes |
 // | :--- | :--- | :--- | :--- | :--- |
-// | 14 | **Display Total System Energy** | 💡 **NEXT UP** | **LOW** | Huge value for simulation stability! A new system to sum kinetic & potential energy is straightforward and can be displayed in a new UI text element. |
-// | 3 | **Delete Selected Atom** | 💡 **NEXT UP** | **MEDIUM** | Very satisfying interactive feature. The core is just `commands.despawn()`. The "medium" effort comes from needing to carefully remove the atom's bonds/angles from `SystemConnectivity` to prevent crashes. |
-// | --- | | | | |
 // | 7 | **Create/Delete Bonds (Shift+Select)**| To Do | **MEDIUM** | Involves managing multi-selection state, checking for key modifiers, and editing `SystemConnectivity`. A great next step for interactivity. |
 // | 9 | **Implement Double Bonds** | To Do | **MEDIUM** | This is more of a core simulation feature. It requires changing `Bond` data structures and the force calculation logic. |
 // | 13 | **Further UI Improvements** | To Do | **MEDIUM** | A good example would be adding buttons for "Pause/Play" or "Reset Simulation" instead of using keyboard-only controls. |
@@ -56,6 +51,25 @@ struct CliArgs {
     /// Start the simulation in a paused state.
     #[arg(long, default_value_t = false)]
     paused: bool,
+}
+
+pub struct CorePlugin;
+
+impl Plugin for CorePlugin {
+    fn build(&self, app: &mut App) {
+        // This is the entire contents of the old CorePlugin
+        app.init_resource::<ForceField>()
+            .init_resource::<SystemConnectivity>()
+            .init_resource::<StepSimulation>()
+            .init_resource::<StepCount>()
+            .init_resource::<SimulationState>()
+            .init_resource::<ActiveWallTime>()
+            .init_resource::<ThermostatScale>()
+            .init_resource::<SystemEnergy>()
+            .init_resource::<CurrentTemperature>()
+            .init_resource::<AtomIdMap>()
+            .init_resource::<ExcludedPairs>();
+    }
 }
 
 fn main() {

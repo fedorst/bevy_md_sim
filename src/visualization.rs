@@ -1,4 +1,4 @@
-use super::core::*;
+use super::components::*;
 use bevy::prelude::*;
 
 pub struct VisualizationPlugin;
