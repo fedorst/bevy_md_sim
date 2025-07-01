@@ -34,6 +34,12 @@ pub struct SimulationState {
     pub paused: bool,
 }
 
+#[derive(Resource)]
+pub struct SharedAssetHandles {
+    pub bond_mesh: Handle<Mesh>,
+    pub bond_material: Handle<StandardMaterial>,
+}
+
 #[derive(Resource, Default, Deref, DerefMut)]
 pub struct StepCount(pub u32);
 

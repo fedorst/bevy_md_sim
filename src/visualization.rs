@@ -1,11 +1,14 @@
 use super::components::*;
 use bevy::prelude::*;
 
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct VisualizationSet;
+
 pub struct VisualizationPlugin;
 
 impl Plugin for VisualizationPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, update_bond_visuals);
+        app.add_systems(Update, update_bond_visuals.in_set(VisualizationSet));
     }
 }
 

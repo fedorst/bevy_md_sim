@@ -100,6 +100,13 @@ fn load_molecule_from_config(
             b: *entity2,
         });
     }
+    let bond_mesh_handle = meshes.add(Cylinder::new(0.02, 1.0));
+    let bond_material_handle = materials.add(Color::srgb(0.8, 0.8, 0.2));
+
+    commands.insert_resource(SharedAssetHandles {
+        bond_mesh: bond_mesh_handle,
+        bond_material: bond_material_handle,
+    });
 }
 
 fn build_derived_connectivity(
@@ -160,18 +167,14 @@ fn build_derived_connectivity(
 
 fn spawn_bond_visuals(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    shared_handles: Res<SharedAssetHandles>,
     connectivity: Res<SystemConnectivity>,
 ) {
-    info!("Spawning bond visuals...");
-    let bond_mesh = meshes.add(Cylinder::new(0.02, 1.0));
-    let bond_mat = materials.add(Color::srgb(0.8, 0.8, 0.2));
-
+    info!("Spawning initial bond visuals...");
     for bond in &connectivity.bonds {
         commands.spawn((
-            Mesh3d(bond_mesh.clone()),
-            MeshMaterial3d(bond_mat.clone()),
+            Mesh3d(shared_handles.bond_mesh.clone()),
+            MeshMaterial3d(shared_handles.bond_material.clone()),
             Transform::default(),
             BondVisualization {
                 atom1: bond.a,
