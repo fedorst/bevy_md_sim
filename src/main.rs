@@ -1,6 +1,6 @@
 mod components;
 mod config;
-mod debug;
+mod interaction;
 mod resources;
 mod setup;
 mod simulation;
@@ -10,7 +10,7 @@ mod visualization;
 use bevy::prelude::*;
 use bevy_panorbit_camera::PanOrbitCameraPlugin;
 use clap::Parser;
-use debug::DebugPlugin;
+use interaction::InteractionPlugin;
 use resources::*; // Import all resourcesuse bevy_panorbit_camera::PanOrbitCameraPlugin;
 use setup::SetupPlugin;
 use simulation::SimulationPlugin;
@@ -94,7 +94,7 @@ fn main() {
             SimulationPlugin,
             UIPlugin,
             VisualizationPlugin,
-            DebugPlugin,
+            InteractionPlugin,
         ))
         .run();
 }

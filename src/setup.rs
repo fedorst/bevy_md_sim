@@ -2,21 +2,8 @@ use super::components::*;
 use super::config::MoleculeConfig;
 use super::resources::*;
 use bevy::prelude::*;
-use bevy::ui::{PositionType, Val};
 use bevy_panorbit_camera::PanOrbitCamera;
 use std::collections::{HashMap, HashSet};
-
-#[derive(Component)]
-pub struct PauseText;
-
-#[derive(Component)]
-pub struct EnergyDisplayText;
-
-#[derive(Component)]
-pub struct TempDisplayText;
-
-#[derive(Component)]
-pub struct TimeDisplayText;
 
 pub struct SetupPlugin;
 
@@ -25,7 +12,7 @@ impl Plugin for SetupPlugin {
         app.add_systems(
             Startup,
             (
-                setup_scene_and_ui,
+                setup_scene,
                 load_molecule_from_config,
                 build_derived_connectivity,
                 spawn_bond_visuals,
@@ -35,7 +22,7 @@ impl Plugin for SetupPlugin {
     }
 }
 
-fn setup_scene_and_ui(mut commands: Commands) {
+fn setup_scene(mut commands: Commands) {
     info!("Setting up scene: Camera, Light, UI");
     commands.spawn((
         PanOrbitCamera::default(),
@@ -44,72 +31,6 @@ fn setup_scene_and_ui(mut commands: Commands) {
     commands.spawn((
         DirectionalLight::default(),
         Transform::from_xyz(10.0, 20.0, 10.0).looking_at(Vec3::ZERO, Vec3::Y),
-    ));
-
-    commands.spawn((
-        Text::new("PAUSED"),
-        Node {
-            position_type: PositionType::Absolute,
-            top: Val::Px(10.0),
-            right: Val::Px(10.0),
-            ..default()
-        },
-        TextFont {
-            font_size: 30.0,
-            ..default()
-        },
-        TextColor(Color::WHITE),
-        PauseText,
-    ));
-
-    commands.spawn((
-        Text::new("Time: ..."),
-        Node {
-            position_type: PositionType::Absolute,
-            top: Val::Px(10.0),
-            left: Val::Px(10.0),
-            ..default()
-        },
-        TextFont {
-            font_size: 20.0,
-            ..default()
-        },
-        TextColor(Color::WHITE),
-        TimeDisplayText,
-    ));
-
-    commands.spawn((
-        Text::new("Temp: ..."),
-        Node {
-            position_type: PositionType::Absolute,
-            top: Val::Px(80.0),
-            left: Val::Px(10.0),
-            ..default()
-        },
-        TextFont {
-            font_size: 20.0,
-            ..default()
-        },
-        TextColor(Color::WHITE),
-        TempDisplayText,
-    ));
-
-    commands.spawn((
-        Text::new("Energy: ..."),
-        Node {
-            position_type: PositionType::Absolute,
-            // Position it below the temperature display
-            top: Val::Px(130.0),
-            left: Val::Px(10.0),
-            width: Val::Px(250.0),
-            ..default()
-        },
-        TextFont {
-            font_size: 16.0,
-            ..default()
-        },
-        TextColor(Color::WHITE),
-        EnergyDisplayText,
     ));
 }
 
