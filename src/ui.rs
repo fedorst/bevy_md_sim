@@ -2,7 +2,7 @@ use super::resources::*;
 use crate::components::{AtomType, Force, Velocity};
 use crate::interaction::InteractionSet; // Import the InteractionSet
 use crate::interaction::SelectionState; // Import from the new location
-
+use bevy::picking::hover::PickingInteraction;
 use bevy::prelude::*;
 use bevy::ui::widget::TextUiWriter;
 
@@ -24,26 +24,99 @@ pub struct UiSet;
 pub struct UIPlugin;
 
 #[derive(Component)]
+pub struct HelpPanel;
+
+#[derive(Resource, Default)]
+pub struct HelpState {
+    pub visible: bool,
+}
+
+#[derive(Component)]
 pub struct DebugInfoPanel;
 
 impl Plugin for UIPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_ui).add_systems(
-            Update,
-            (
-                handle_simulation_control,
-                continuous_simulation,
-                update_pause_text,
-                update_time_display,
-                track_active_wall_time,
-                update_temp_display,
-                update_energy_display,
-                update_info_panel,
-            )
-                .in_set(UiSet)
-                .after(InteractionSet),
-        );
+        app.init_resource::<HelpState>()
+            .add_systems(Startup, setup_ui)
+            .add_systems(
+                Update,
+                (
+                    handle_simulation_control,
+                    continuous_simulation,
+                    update_pause_text,
+                    update_time_display,
+                    track_active_wall_time,
+                    update_temp_display,
+                    update_energy_display,
+                    update_info_panel,
+                    toggle_help_visibility,
+                    update_help_panel,
+                )
+                    .in_set(UiSet)
+                    .after(InteractionSet),
+            );
     }
+}
+
+fn toggle_help_visibility(keys: Res<ButtonInput<KeyCode>>, mut help_state: ResMut<HelpState>) {
+    if keys.just_pressed(KeyCode::KeyH) {
+        help_state.visible = !help_state.visible;
+    }
+}
+
+fn update_help_panel(
+    help_state: Res<HelpState>,
+    selection: Res<SelectionState>,
+    hover_query: Query<&PickingInteraction, With<AtomType>>,
+    mut help_panel_query: Query<(&mut Text, &mut Visibility), With<HelpPanel>>,
+) {
+    let Ok((mut text, mut visibility)) = help_panel_query.single_mut() else {
+        return;
+    };
+
+    if !help_state.visible {
+        // If help is hidden, just show the prompt.
+        text.0 = "h: Toggle Help".to_string();
+        return;
+    }
+
+    // 1. Control overall visibility first
+    if !help_state.visible {
+        *visibility = Visibility::Hidden;
+        if !text.0.is_empty() {
+            text.0.clear();
+        }
+        return; // Don't do any work if it's hidden
+    }
+    *visibility = Visibility::Visible;
+
+    // 2. Check for hover state
+    let is_hovering_atom = hover_query
+        .iter()
+        .any(|i| *i == PickingInteraction::Hovered);
+
+    // 3. Build the text string piece by piece
+    let mut lines = vec!["h: Toggle Help", "Space: Toggle Pause"];
+
+    // 4. Add context-specific lines
+    if is_hovering_atom {
+        lines.push("LMB (click): Select / Deselect Atom");
+    }
+
+    lines.push("LMB (drag): Rotate Camera");
+    lines.push("RMB (drag): Pan Camera");
+    lines.push("F: Focus on last Selected");
+
+    if !selection.selected.is_empty() {
+        lines.push("Shift+LMB: Add/Remove from Selection");
+        lines.push("Delete: Delete Selected");
+    }
+
+    if selection.selected.len() == 2 {
+        lines.push("b: Toggle Bond");
+    }
+
+    text.0 = lines.join("\n");
 }
 
 fn display_single_atom_info(
@@ -251,7 +324,7 @@ fn setup_ui(mut commands: Commands) {
             // Position it below the temperature display
             top: Val::Px(130.0),
             left: Val::Px(10.0),
-            width: Val::Px(250.0),
+            width: Val::Px(384.0),
             ..default()
         },
         TextFont {
@@ -266,7 +339,7 @@ fn setup_ui(mut commands: Commands) {
             position_type: PositionType::Absolute,
             bottom: Val::Px(10.0),
             left: Val::Px(10.0),
-            width: Val::Px(250.0),
+            width: Val::Px(384.0),
             padding: UiRect::all(Val::Px(10.0)),
             flex_direction: FlexDirection::Column,
             ..default()
@@ -278,6 +351,25 @@ fn setup_ui(mut commands: Commands) {
             ..default()
         },
         DebugInfoPanel,
+    ));
+    commands.spawn((
+        // It starts with the default "collapsed" text
+        Text::new("h: Toggle Help"),
+        Node {
+            position_type: PositionType::Absolute,
+            bottom: Val::Px(10.0),
+            right: Val::Px(10.0), // Let's put it in the bottom-right
+            padding: UiRect::all(Val::Px(10.0)),
+            width: Val::Px(384.0),
+            ..default()
+        },
+        BackgroundColor(Color::BLACK.with_alpha(0.75)),
+        TextFont {
+            font_size: 16.0,
+            ..default()
+        },
+        // Add our marker component so we can find it.
+        HelpPanel,
     ));
 }
 
