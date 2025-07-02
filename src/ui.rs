@@ -2,7 +2,8 @@ use super::resources::*;
 use crate::components::{Atom, Force, Velocity};
 use crate::interaction::InteractionSet; // Import the InteractionSet
 use crate::interaction::SelectionState; // Import from the new location
-use crate::resources::BondOrder;
+use crate::resources::{ActiveInput, BondOrder, ForceMultiplier};
+use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::picking::hover::PickingInteraction;
 use bevy::prelude::*;
 use bevy::ui::widget::TextUiWriter;
@@ -39,6 +40,21 @@ struct PauseMenuPanel;
 struct PauseMenuButton;
 
 #[derive(Component)]
+struct DtInputField;
+
+#[derive(Component)]
+struct TempInputField;
+
+#[derive(Component)]
+struct TauInputField;
+
+#[derive(Component)]
+struct ForceMultiplierInputField;
+
+#[derive(Component)]
+struct ApplyButton;
+
+#[derive(Component)]
 pub struct DebugInfoPanel;
 
 impl Plugin for UIPlugin {
@@ -56,7 +72,12 @@ impl Plugin for UIPlugin {
                     update_time_display,
                     track_active_wall_time,
                     update_temp_display,
+                    update_input_field_highlight,
                     update_energy_display,
+                    handle_input_clicks,
+                    handle_keyboard_input,
+                    update_input_field_display,
+                    handle_apply_button,
                     update_info_panel,
                     update_pause_menu_panel,
                     toggle_help_visibility,
@@ -68,13 +89,66 @@ impl Plugin for UIPlugin {
     }
 }
 
+fn update_input_field_highlight(
+    mut commands: Commands,
+    menu_state: Res<PauseMenuState>,
+    dt_e: Query<Entity, With<DtInputField>>,
+    temp_e: Query<Entity, With<TempInputField>>,
+    tau_e: Query<Entity, With<TauInputField>>,
+    force_e: Query<Entity, With<ForceMultiplierInputField>>,
+) {
+    // This function clears the outline from an entity if it exists.
+    let mut clear_outline = |entity: Entity| {
+        if let Ok(mut entity_commands) = commands.get_entity(entity) {
+            entity_commands.remove::<Outline>();
+        }
+    };
+
+    // Clear outlines from all fields first.
+    if let Ok(entity) = dt_e.single() {
+        clear_outline(entity);
+    }
+    if let Ok(entity) = temp_e.single() {
+        clear_outline(entity);
+    }
+    if let Ok(entity) = tau_e.single() {
+        clear_outline(entity);
+    }
+    if let Ok(entity) = force_e.single() {
+        clear_outline(entity);
+    }
+
+    // Add an outline to the currently active field.
+    if let Some(active_input) = menu_state.active_input {
+        let target_entity_result = match active_input {
+            ActiveInput::Dt => dt_e.single(),
+            ActiveInput::Temp => temp_e.single(),
+            ActiveInput::Tau => tau_e.single(),
+            ActiveInput::ForceMultiplier => force_e.single(),
+        };
+        if let Ok(target_entity) = target_entity_result {
+            commands.entity(target_entity).insert(Outline {
+                width: Val::Px(2.0),
+                offset: Val::Px(2.0),
+                color: Color::WHITE,
+            });
+        }
+    }
+}
+
 fn toggle_pause_menu(
     keys: Res<ButtonInput<KeyCode>>,
     mut sim_state: ResMut<SimulationState>,
     mut menu_state: ResMut<PauseMenuState>,
     interaction_query: Query<&Interaction, (Changed<Interaction>, With<PauseMenuButton>)>,
+    sim_params: Res<SimulationParameters>,
+    thermostat: Res<Thermostat>,
+    force_multiplier: Res<ForceMultiplier>,
 ) {
     let mut should_toggle = keys.just_pressed(KeyCode::KeyM);
+    if menu_state.visible && keys.just_pressed(KeyCode::Escape) {
+        should_toggle = true;
+    }
     if !should_toggle {
         for interaction in &interaction_query {
             if *interaction == Interaction::Pressed {
@@ -92,8 +166,167 @@ fn toggle_pause_menu(
             // If menu is closed, open it AND pause the simulation.
             menu_state.visible = true;
             sim_state.paused = true;
+            menu_state.active_input = None;
+
+            // --- PRE-POPULATE THE FIELDS ---
+            menu_state.dt_str = sim_params.dt.to_string();
+            menu_state.temp_str = thermostat.target_temperature.to_string();
+            menu_state.tau_str = thermostat.tau.to_string();
+            menu_state.force_multiplier_str = force_multiplier.0.to_string();
         }
     }
+}
+
+fn handle_input_clicks(
+    mut menu_state: ResMut<PauseMenuState>,
+    dt_q: Query<&Interaction, (Changed<Interaction>, With<DtInputField>)>,
+    temp_q: Query<&Interaction, (Changed<Interaction>, With<TempInputField>)>,
+    tau_q: Query<&Interaction, (Changed<Interaction>, With<TauInputField>)>,
+    force_q: Query<&Interaction, (Changed<Interaction>, With<ForceMultiplierInputField>)>,
+) {
+    if let Ok(Interaction::Pressed) = dt_q.single() {
+        menu_state.active_input = Some(ActiveInput::Dt);
+    }
+    if let Ok(Interaction::Pressed) = temp_q.single() {
+        menu_state.active_input = Some(ActiveInput::Temp);
+    }
+    if let Ok(Interaction::Pressed) = tau_q.single() {
+        menu_state.active_input = Some(ActiveInput::Tau);
+    }
+    if let Ok(Interaction::Pressed) = force_q.single() {
+        menu_state.active_input = Some(ActiveInput::ForceMultiplier);
+    }
+}
+
+fn handle_keyboard_input(
+    mut menu_state: ResMut<PauseMenuState>,
+    mut key_evr: EventReader<KeyboardInput>,
+) {
+    if let Some(active_input) = menu_state.active_input {
+        let target_str = match active_input {
+            ActiveInput::Dt => &mut menu_state.dt_str,
+            ActiveInput::Temp => &mut menu_state.temp_str,
+            ActiveInput::Tau => &mut menu_state.tau_str,
+            ActiveInput::ForceMultiplier => &mut menu_state.force_multiplier_str,
+        };
+
+        for ev in key_evr.read() {
+            // Only process key presses
+            if !ev.state.is_pressed() {
+                continue;
+            }
+
+            match &ev.logical_key {
+                Key::Character(chars) => {
+                    // Allow numbers and a single decimal point.
+                    for char in chars.chars() {
+                        if char.is_ascii_digit() || (char == '.' && !target_str.contains('.')) {
+                            target_str.push(char);
+                        }
+                    }
+                }
+                Key::Backspace => {
+                    target_str.pop();
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+fn update_input_field_display(
+    menu_state: Res<PauseMenuState>,
+    mut writer: TextUiWriter,
+    dt_q: Query<&Children, With<DtInputField>>,
+    temp_q: Query<&Children, With<TempInputField>>,
+    tau_q: Query<&Children, With<TauInputField>>,
+    force_q: Query<&Children, With<ForceMultiplierInputField>>,
+) {
+    if menu_state.is_changed() {
+        if let Ok(children) = dt_q.single() {
+            if let Some(text_entity) = children.first() {
+                *writer.text(*text_entity, 0) = menu_state.dt_str.clone();
+            }
+        }
+        if let Ok(children) = temp_q.single() {
+            if let Some(text_entity) = children.first() {
+                *writer.text(*text_entity, 0) = menu_state.temp_str.clone();
+            }
+        }
+        if let Ok(children) = tau_q.single() {
+            if let Some(text_entity) = children.first() {
+                *writer.text(*text_entity, 0) = menu_state.tau_str.clone();
+            }
+        }
+        if let Ok(children) = force_q.single() {
+            if let Some(text_entity) = children.first() {
+                *writer.text(*text_entity, 0) = menu_state.force_multiplier_str.clone();
+            }
+        }
+    }
+}
+
+fn handle_apply_button(
+    interaction_q: Query<&Interaction, (Changed<Interaction>, With<ApplyButton>)>,
+    mut menu_state: ResMut<PauseMenuState>,
+    mut sim_state: ResMut<SimulationState>,
+    mut sim_params: ResMut<SimulationParameters>,
+    mut thermostat: ResMut<Thermostat>,
+    mut force_multiplier: ResMut<ForceMultiplier>,
+) {
+    if let Ok(Interaction::Pressed) = interaction_q.single() {
+        if let Ok(dt) = menu_state.dt_str.parse::<f32>() {
+            sim_params.dt = dt;
+        }
+        if let Ok(temp) = menu_state.temp_str.parse::<f32>() {
+            thermostat.target_temperature = temp;
+        }
+        if let Ok(tau) = menu_state.tau_str.parse::<f32>() {
+            thermostat.tau = tau;
+        }
+        if let Ok(fm) = menu_state.force_multiplier_str.parse::<f32>() {
+            force_multiplier.0 = fm;
+        }
+
+        // Close menu and unpause
+        menu_state.visible = false;
+        sim_state.paused = false;
+    }
+}
+
+fn spawn_input_row(
+    parent: &mut ChildSpawnerCommands,
+    label: &str,
+    initial_value: String,
+    marker_component: impl Component,
+) {
+    parent
+        .spawn(Node {
+            width: Val::Percent(100.0),
+            flex_direction: FlexDirection::Row,
+            justify_content: JustifyContent::SpaceBetween,
+            align_items: AlignItems::Center,
+            margin: UiRect::bottom(Val::Px(10.0)),
+            ..default()
+        })
+        .with_children(|p| {
+            p.spawn(Text::new(label));
+            p.spawn((
+                Button,
+                marker_component,
+                Node {
+                    width: Val::Px(150.0),
+                    height: Val::Px(40.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    border: UiRect::all(Val::Px(2.0)),
+                    ..default()
+                },
+                BackgroundColor(Color::srgb(0.1, 0.1, 0.1)),
+                BorderColor(Color::srgb(0.5, 0.5, 0.5)),
+            ))
+            .with_child(Text::new(initial_value));
+        });
 }
 
 fn update_pause_menu_panel(
@@ -376,18 +609,69 @@ fn setup_ui(mut commands: Commands) {
         ));
 
     // --- The Pause Menu Panel (initially hidden) ---
-    commands.spawn((
-        PauseMenuPanel,
-        Visibility::Hidden,
-        Node {
-            width: Val::Percent(100.0),
-            height: Val::Percent(100.0),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            ..default()
-        },
-        BackgroundColor(Color::BLACK.with_alpha(0.75)), // Semi-transparent overlay
-    ));
+    commands
+        .spawn((
+            PauseMenuPanel,
+            Visibility::Hidden,
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            BackgroundColor(Color::BLACK.with_alpha(0.75)), // Semi-transparent overlay
+        ))
+        .with_children(|parent| {
+            // Main settings box
+            parent
+                .spawn(Node {
+                    width: Val::Px(400.0),
+                    flex_direction: FlexDirection::Column,
+                    padding: UiRect::all(Val::Px(20.0)),
+                    ..default()
+                })
+                .with_children(|p| {
+                    // Title
+                    p.spawn((
+                        Text::new("Settings"),
+                        TextFont {
+                            font_size: 32.0,
+                            ..default()
+                        },
+                        Node {
+                            width: Val::Percent(100.0),
+                            justify_content: JustifyContent::Center,
+                            margin: UiRect::bottom(Val::Px(20.0)),
+                            ..default()
+                        },
+                    ));
+
+                    // Spawn the input rows
+                    spawn_input_row(p, "Timestep (dt)", "0.0".to_string(), DtInputField);
+                    spawn_input_row(p, "Target Temp (K)", "0.0".to_string(), TempInputField);
+                    spawn_input_row(p, "Thermostat Tau (ps)", "0.0".to_string(), TauInputField);
+                    spawn_input_row(
+                        p,
+                        "Force Multiplier",
+                        "1.0".to_string(),
+                        ForceMultiplierInputField,
+                    );
+
+                    // Apply Button
+                    p.spawn((
+                        Button,
+                        ApplyButton,
+                        Node {
+                            margin: UiRect::top(Val::Px(20.0)),
+                            padding: UiRect::all(Val::Px(10.0)),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgb(0.2, 0.6, 0.2)),
+                    ))
+                    .with_child(Text::new("Apply & Resume"));
+                });
+        });
 
     commands.spawn((
         Text::new("Time: ..."),

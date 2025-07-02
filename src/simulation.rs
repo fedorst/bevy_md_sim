@@ -190,9 +190,9 @@ fn calculate_kinetic_energy(
     energy.total = energy.potential + energy.kinetic;
 }
 
-fn sum_total_forces(mut query: Query<&mut Force>) {
+fn sum_total_forces(mut query: Query<&mut Force>, multiplier: Res<ForceMultiplier>) {
     for mut force in &mut query {
-        force.total = force.bond + force.angle + force.non_bonded;
+        force.total = (force.bond + force.angle + force.non_bonded) * multiplier.0;
     }
 }
 

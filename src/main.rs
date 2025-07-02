@@ -53,6 +53,7 @@ impl Plugin for CorePlugin {
             .to_string();
 
         app.insert_resource(ForceField::from_file(&ff_path))
+            .insert_resource::<ForceMultiplier>(ForceMultiplier(1.0))
             .init_resource::<SystemConnectivity>()
             .init_resource::<StepSimulation>()
             .init_resource::<StepCount>()
