@@ -105,16 +105,33 @@ struct AngleParam {
 }
 
 #[derive(Deserialize, Debug)]
+struct DihedralParam {
+    types: [String; 4],
+    k: f32,
+    n: i32,
+    phi0_deg: f32,
+}
+
+#[derive(Deserialize, Debug)]
 struct ForceFieldFile {
     atom_types: HashMap<String, AtomTypeParam>,
     bonds: Vec<BondParam>,
     angles: Vec<AngleParam>,
+    dihedrals: Vec<DihedralParam>,
+}
+
+pub struct Dihedral {
+    pub a: Entity,
+    pub b: Entity,
+    pub c: Entity,
+    pub d: Entity,
 }
 
 #[derive(Resource, Default)]
 pub struct SystemConnectivity {
     pub bonds: Vec<Bond>,
     pub angles: Vec<Angle>,
+    pub dihedrals: Vec<Dihedral>,
 }
 
 #[derive(Resource, Debug, Default)]
@@ -122,6 +139,7 @@ pub struct ForceField {
     pub atom_types: HashMap<String, AtomTypeParam>,
     pub bond_params: HashMap<(String, String, BondOrder), (f32, f32)>,
     pub angle_params: HashMap<(String, String, String), (f32, f32)>,
+    pub dihedral_params: HashMap<(String, String, String, String), (f32, i32, f32)>,
     pub coulomb_k: f32,
 }
 
@@ -156,10 +174,34 @@ impl ForceField {
             );
         }
 
+        let mut dihedral_params = HashMap::new();
+        for p in ff_file.dihedrals {
+            let phi0_rad = p.phi0_deg.to_radians();
+            dihedral_params.insert(
+                (
+                    p.types[0].clone(),
+                    p.types[1].clone(),
+                    p.types[2].clone(),
+                    p.types[3].clone(),
+                ),
+                (p.k, p.n, phi0_rad),
+            );
+            dihedral_params.insert(
+                (
+                    p.types[3].clone(),
+                    p.types[2].clone(),
+                    p.types[1].clone(),
+                    p.types[0].clone(),
+                ),
+                (p.k, p.n, phi0_rad),
+            );
+        }
+
         Self {
             atom_types: ff_file.atom_types,
             bond_params,
             angle_params,
+            dihedral_params,
             coulomb_k: 138.935458,
         }
     }

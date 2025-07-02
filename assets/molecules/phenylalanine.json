@@ -1,0 +1,56 @@
+{
+  "name": "Phenylalanine (Zwitterion)",
+  "atoms": [
+    { "id": "N", "type_name": "N_PLUS", "pos": [0.0, 0.086, 0.126] },
+    { "id": "CA", "type_name": "CT", "pos": [0.0, 0.0, 0.0] },
+    { "id": "C", "type_name": "C_CO", "pos": [0.122, -0.063, -0.05] },
+    { "id": "O1", "type_name": "O_COO", "pos": [0.121, -0.18, -0.051] },
+    { "id": "O2", "type_name": "O_COO", "pos": [0.22, 0.014, -0.088] },
+    { "id": "H_N1", "type_name": "H_O", "pos": [0.0, 0.17, 0.08] },
+    { "id": "H_N2", "type_name": "H_O", "pos": [-0.08, 0.06, 0.18] },
+    { "id": "H_CA", "type_name": "H_C", "pos": [-0.08, -0.06, -0.06] },
+
+    { "id": "CB", "type_name": "CT", "pos": [-0.106, -0.09, 0.11] },
+    { "id": "H_CB1", "type_name": "H_C", "pos": [-0.11, -0.18, 0.05] },
+    { "id": "H_CB2", "type_name": "H_C", "pos": [-0.19, -0.03, 0.15] },
+
+    { "id": "CG", "type_name": "CA", "pos": [-0.07, -0.12, 0.25] },
+    { "id": "CD1", "type_name": "CA", "pos": [0.03, -0.18, 0.3] },
+    { "id": "CD2", "type_name": "CA", "pos": [-0.17, -0.09, 0.34] },
+    { "id": "CE1", "type_name": "CA", "pos": [0.03, -0.2, 0.43] },
+    { "id": "CE2", "type_name": "CA", "pos": [-0.17, -0.12, 0.47] },
+    { "id": "CZ", "type_name": "CA", "pos": [-0.07, -0.17, 0.52] },
+
+    { "id": "H_CD1", "type_name": "HA", "pos": [0.11, -0.21, 0.26] },
+    { "id": "H_CD2", "type_name": "HA", "pos": [-0.25, -0.05, 0.31] },
+    { "id": "H_CE1", "type_name": "HA", "pos": [0.11, -0.25, 0.47] },
+    { "id": "H_CE2", "type_name": "HA", "pos": [-0.25, -0.1, 0.53] },
+    { "id": "H_CZ", "type_name": "HA", "pos": [-0.07, -0.2, 0.61] }
+  ],
+  "bonds": [
+    ["N", "CA"],
+    ["CA", "C"],
+    ["C", "O1"],
+    ["C", "O2"],
+    ["N", "H_N1"],
+    ["N", "H_N2"],
+    ["CA", "H_CA"],
+    ["CA", "CB"],
+    ["CB", "H_CB1"],
+    ["CB", "H_CB2"],
+    ["CB", "CG"],
+
+    ["CG", "CD1"],
+    ["CG", "CD2"],
+    ["CD1", "CE1"],
+    ["CD2", "CE2"],
+    ["CE1", "CZ"],
+    ["CE2", "CZ"],
+
+    ["CD1", "H_CD1"],
+    ["CD2", "H_CD2"],
+    ["CE1", "H_CE1"],
+    ["CE2", "H_CE2"],
+    ["CZ", "H_CZ"]
+  ]
+}

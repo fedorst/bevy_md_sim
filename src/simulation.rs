@@ -16,6 +16,7 @@ impl Plugin for SimulationPlugin {
                 reset_energy,
                 calculate_bond_forces,
                 calculate_angle_forces,
+                calculate_dihedral_forces,
                 calculate_non_bonded_forces,
                 sum_total_forces,
                 finish_velocity_update,
@@ -31,6 +32,69 @@ impl Plugin for SimulationPlugin {
         );
     }
 }
+
+fn calculate_dihedral_forces(
+    connectivity: Res<SystemConnectivity>,
+    mut atom_query: Query<(&mut Transform, &mut Force, &Atom)>,
+    force_field: Res<ForceField>,
+    mut energy: ResMut<SystemEnergy>,
+) {
+    for dihedral in &connectivity.dihedrals {
+        let Ok(
+            [
+                (t_a, mut f_a, type_a),
+                (t_b, mut f_b, type_b),
+                (t_c, mut f_c, type_c),
+                (t_d, mut f_d, type_d),
+            ],
+        ) = atom_query.get_many_mut([dihedral.a, dihedral.b, dihedral.c, dihedral.d])
+        else {
+            continue;
+        };
+
+        let key = (
+            type_a.type_name.clone(),
+            type_b.type_name.clone(),
+            type_c.type_name.clone(),
+            type_d.type_name.clone(),
+        );
+
+        if let Some(&(k, n, phi0)) = force_field.dihedral_params.get(&key) {
+            let r_ab = t_b.translation - t_a.translation;
+            let r_cb = t_b.translation - t_c.translation;
+            let r_dc = t_c.translation - t_d.translation;
+
+            let n1 = r_ab.cross(r_cb).normalize_or_zero();
+            let n2 = r_dc.cross(r_cb).normalize_or_zero();
+
+            let phi = n1.angle_between(n2);
+            let sign = if r_ab.dot(n2) > 0.0 { 1.0 } else { -1.0 };
+            let phi = phi * sign;
+
+            // Potential energy: E = k * (1 + cos(n*phi - phi0))
+            energy.potential += k * (1.0 + (n as f32 * phi - phi0).cos());
+
+            // Force calculation
+            let force_mag = k * n as f32 * (n as f32 * phi - phi0).sin();
+
+            let r_cb_len = r_cb.length();
+            let f1 = (force_mag * r_cb_len / r_ab.length_squared()) * n1;
+            let f4 = (-force_mag * r_cb_len / r_dc.length_squared()) * n2;
+
+            let term_b = r_ab.dot(r_cb) / r_cb.length_squared();
+            let term_c = r_dc.dot(r_cb) / r_cb.length_squared();
+
+            let f2 = (1.0 - term_b) * f1 - term_c * f4;
+            let f3 = (1.0 - term_c) * f4 - term_b * f1;
+
+            f_a.angle += f1;
+            f_b.angle += f2;
+            f_c.angle += f3;
+            f_d.angle += f4;
+        }
+    }
+}
+
 fn reset_forces(mut query: Query<&mut Force>) {
     for mut force in &mut query {
         *force = Force::default();

@@ -163,6 +163,23 @@ fn build_derived_connectivity(
         }
     }
 
+    let mut new_dihedrals = Vec::new();
+    for bond1 in &connectivity.bonds {
+        for bond2 in &connectivity.bonds {
+            // Find dihedrals A-B-C-D where B-C is the connection between bond1 and bond2
+            if bond1.b == bond2.a && bond1.a != bond2.b {
+                new_dihedrals.push(Dihedral {
+                    a: bond1.a,
+                    b: bond1.b,
+                    c: bond2.a,
+                    d: bond2.b,
+                });
+            }
+        }
+    }
+    // After the immutable borrows are finished, append the new dihedrals.
+    connectivity.dihedrals.append(&mut new_dihedrals);
+
     // Now build the exclusion lists (this is the logic from your old `build_exclusions`)
     let mut one_two = HashSet::new();
     for bond in &connectivity.bonds {
@@ -185,8 +202,9 @@ fn build_derived_connectivity(
     }
 
     info!(
-        "Connectivity generation complete. Angles: {}, 1-2 Exclusions: {}, 1-3 Exclusions: {}",
+        "Connectivity generation complete. Angles: {}, Dihedrals: {}, 1-2 Exclusions: {}, 1-3 Exclusions: {}",
         connectivity.angles.len(),
+        connectivity.dihedrals.len(),
         one_two.len(),
         one_three.len()
     );
