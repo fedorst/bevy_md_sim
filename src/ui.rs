@@ -33,16 +33,24 @@ pub struct HelpState {
 }
 
 #[derive(Component)]
+struct PauseMenuPanel;
+
+#[derive(Component)]
+struct PauseMenuButton;
+
+#[derive(Component)]
 pub struct DebugInfoPanel;
 
 impl Plugin for UIPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<HelpState>()
+            .init_resource::<PauseMenuState>()
             .add_systems(Startup, setup_ui)
             .add_systems(
                 Update,
                 (
                     handle_simulation_control,
+                    toggle_pause_menu,
                     continuous_simulation,
                     update_pause_text,
                     update_time_display,
@@ -50,12 +58,56 @@ impl Plugin for UIPlugin {
                     update_temp_display,
                     update_energy_display,
                     update_info_panel,
+                    update_pause_menu_panel,
                     toggle_help_visibility,
                     update_help_panel,
                 )
                     .in_set(UiSet)
                     .after(InteractionSet),
             );
+    }
+}
+
+fn toggle_pause_menu(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut sim_state: ResMut<SimulationState>,
+    mut menu_state: ResMut<PauseMenuState>,
+    interaction_query: Query<&Interaction, (Changed<Interaction>, With<PauseMenuButton>)>,
+) {
+    let mut should_toggle = keys.just_pressed(KeyCode::KeyM);
+    if !should_toggle {
+        for interaction in &interaction_query {
+            if *interaction == Interaction::Pressed {
+                should_toggle = true;
+                break;
+            }
+        }
+    }
+
+    if should_toggle {
+        if menu_state.visible {
+            // If menu is open, just close it. Do not touch sim_state.
+            menu_state.visible = false;
+        } else {
+            // If menu is closed, open it AND pause the simulation.
+            menu_state.visible = true;
+            sim_state.paused = true;
+        }
+    }
+}
+
+fn update_pause_menu_panel(
+    menu_state: Res<PauseMenuState>,
+    mut panel_query: Query<&mut Visibility, With<PauseMenuPanel>>,
+) {
+    if menu_state.is_changed() {
+        if let Ok(mut visibility) = panel_query.single_mut() {
+            *visibility = if menu_state.visible {
+                Visibility::Visible
+            } else {
+                Visibility::Hidden
+            };
+        }
     }
 }
 
@@ -288,14 +340,53 @@ fn setup_ui(mut commands: Commands) {
             position_type: PositionType::Absolute,
             top: Val::Px(10.0),
             right: Val::Px(10.0),
+            left: Val::Percent(50.0),
             ..default()
         },
+        Transform::from_translation(Vec3::new(-50.0, 0.0, 0.0)),
         TextFont {
             font_size: 30.0,
             ..default()
         },
         TextColor(Color::WHITE),
         PauseText,
+    ));
+
+    //  (m) Pause Menu Button
+    commands
+        .spawn((
+            Button,
+            PauseMenuButton,
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(10.0),
+                right: Val::Px(10.0),
+                padding: UiRect::all(Val::Px(10.0)),
+                ..default()
+            },
+            BackgroundColor(Color::srgb(0.2, 0.2, 0.2)),
+        ))
+        .with_child((
+            Text::new("(m) Pause Menu"),
+            TextFont {
+                font_size: 20.0,
+                ..default()
+            },
+            TextColor(Color::WHITE),
+        ));
+
+    // --- The Pause Menu Panel (initially hidden) ---
+    commands.spawn((
+        PauseMenuPanel,
+        Visibility::Hidden,
+        Node {
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            ..default()
+        },
+        BackgroundColor(Color::BLACK.with_alpha(0.75)), // Semi-transparent overlay
     ));
 
     commands.spawn((
@@ -426,15 +517,23 @@ fn update_temp_display(
 }
 
 fn handle_simulation_control(
-    mut state: ResMut<SimulationState>,
+    mut sim_state: ResMut<SimulationState>,
+    mut menu_state: ResMut<PauseMenuState>,
     mut step: ResMut<StepSimulation>,
     keys: Res<ButtonInput<KeyCode>>,
 ) {
     if keys.just_pressed(KeyCode::Space) {
-        state.paused = !state.paused;
+        if menu_state.visible {
+            // If the menu is open, Space closes it and ALWAYS unpauses.
+            menu_state.visible = false;
+            sim_state.paused = false;
+        } else {
+            // Otherwise, it's just a simple toggle.
+            sim_state.paused = !sim_state.paused;
+        }
     }
     // Right arrow steps one frame when paused
-    if state.paused && keys.just_pressed(KeyCode::ArrowRight) {
+    if sim_state.paused && keys.just_pressed(KeyCode::ArrowRight) {
         step.0 = true;
     }
 }

@@ -57,17 +57,6 @@ fn load_molecule_from_config(
 
     info!("Spawning atoms for: {}", molecule_config.name);
 
-    // let atom_mesh_map: HashMap<AtomType, Handle<Mesh>> = [
-    //     (AtomType::Carbon, meshes.add(Sphere::new(0.06))),
-    //     (AtomType::Oxygen, meshes.add(Sphere::new(0.05))),
-    //     (AtomType::Hydrogen, meshes.add(Sphere::new(0.035))),
-    //     (AtomType::Nitrogen, meshes.add(Sphere::new(0.055))),
-    //     (AtomType::CarboxylateOxygen, meshes.add(Sphere::new(0.05))), // Same size as other O
-    //     (AtomType::ChargedNitrogen, meshes.add(Sphere::new(0.055))),  // Same size as other N
-    // ]
-    // .into_iter()
-    // .collect();
-
     let mut element_mesh_map: HashMap<String, Handle<Mesh>> = HashMap::new();
 
     let mut id_to_entity_map = HashMap::new();

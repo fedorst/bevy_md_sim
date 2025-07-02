@@ -40,6 +40,11 @@ pub struct SimulationState {
     pub paused: bool,
 }
 
+#[derive(Resource, Default)]
+pub struct PauseMenuState {
+    pub visible: bool,
+}
+
 #[derive(Resource)]
 pub struct SharedAssetHandles {
     pub bond_mesh: Handle<Mesh>,

@@ -56,6 +56,7 @@ impl Plugin for CorePlugin {
             .init_resource::<SystemConnectivity>()
             .init_resource::<StepSimulation>()
             .init_resource::<StepCount>()
+            .init_resource::<PauseMenuState>()
             .init_resource::<SimulationState>()
             .init_resource::<ActiveWallTime>()
             .init_resource::<ThermostatScale>()
