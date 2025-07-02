@@ -1,7 +1,8 @@
 use super::resources::*;
-use crate::components::{AtomType, Force, Velocity};
+use crate::components::{Atom, Force, Velocity};
 use crate::interaction::InteractionSet; // Import the InteractionSet
 use crate::interaction::SelectionState; // Import from the new location
+use crate::resources::BondOrder;
 use bevy::picking::hover::PickingInteraction;
 use bevy::prelude::*;
 use bevy::ui::widget::TextUiWriter;
@@ -67,7 +68,7 @@ fn toggle_help_visibility(keys: Res<ButtonInput<KeyCode>>, mut help_state: ResMu
 fn update_help_panel(
     help_state: Res<HelpState>,
     selection: Res<SelectionState>,
-    hover_query: Query<&PickingInteraction, With<AtomType>>,
+    hover_query: Query<&PickingInteraction, With<Atom>>,
     mut help_panel_query: Query<(&mut Text, &mut Visibility), With<HelpPanel>>,
 ) {
     let Ok((mut text, mut visibility)) = help_panel_query.single_mut() else {
@@ -122,13 +123,13 @@ fn update_help_panel(
 fn display_single_atom_info(
     entity: Entity,
     atom_id_map: &Res<AtomIdMap>,
-    atom_query: &Query<(&AtomType, &Transform, &Velocity, &Force)>,
+    atom_query: &Query<(&Atom, &Transform, &Velocity, &Force)>,
 ) -> String {
-    if let Ok((atom_type, _transform, velocity, force)) = atom_query.get(entity) {
+    if let Ok((atom, _transform, velocity, force)) = atom_query.get(entity) {
         let pretty_id = atom_id_map.entity_to_id.get(&entity).unwrap();
         format!(
             "Selected: {}\n\
-             Type: {:?}\n\
+             Type: {}\n\
              Vel (mag): {:.2}\n\
              --- Forces (mag) ---\n\
              Total: {:.1}\n\
@@ -136,7 +137,7 @@ fn display_single_atom_info(
              Angle: {:.1}\n\
              Non-Bonded: {:.1}",
             pretty_id,
-            atom_type,
+            atom.type_name,
             velocity.length(),
             force.total_magnitude(),
             force.bond.length(),
@@ -154,27 +155,39 @@ fn display_bond_info(
     connectivity: &Res<SystemConnectivity>,
     force_field: &Res<ForceField>,
     atom_id_map: &Res<AtomIdMap>,
-    atom_query: &Query<(&AtomType, &Transform, &Velocity, &Force)>,
+    atom_query: &Query<(&Atom, &Transform, &Velocity, &Force)>,
 ) -> Option<String> {
     // Return Option<String> in case there's no bond
-    if let Some(_bond) = connectivity
+    if let Some(bond) = connectivity
         .bonds
         .iter()
         .find(|b| (b.a == e1 && b.b == e2) || (b.a == e2 && b.b == e1))
     {
         if let Ok([(type1, t1, _, _), (type2, t2, _, _)]) = atom_query.get_many([e1, e2]) {
-            if let Some(&(_k, r0)) = force_field.bond_params.get(&(*type1, *type2)) {
+            if let Some(&(_k, r0)) = force_field.bond_params.get(&(
+                type1.type_name.clone(),
+                type2.type_name.clone(),
+                bond.order,
+            )) {
                 let current_dist = t1.translation.distance(t2.translation);
                 let id1 = atom_id_map.entity_to_id.get(&e1).unwrap();
                 let id2 = atom_id_map.entity_to_id.get(&e2).unwrap();
+                let bond_type_str = match bond.order {
+                    BondOrder::Single => "Single Bond",
+                    BondOrder::Double => "Double Bond",
+                };
                 return Some(format!(
-                    "Selected Bond:\n{}-{}\n\
+                    "Selected {}-{}\n\
+                    Type: {} ({}-{})\n\
                      --- Geometry ---\n\
                      Current Len: {:.3} nm\n\
                      Optimal Len: {:.3} nm\n\
                      Strain: {:.2}%",
                     id1,
                     id2,
+                    bond_type_str,
+                    type1.type_name,
+                    type2.type_name,
                     current_dist,
                     r0,
                     (current_dist / r0 - 1.0) * 100.0
@@ -190,7 +203,7 @@ fn display_angle_info(
     connectivity: &Res<SystemConnectivity>,
     force_field: &Res<ForceField>,
     atom_id_map: &Res<AtomIdMap>,
-    atom_query: &Query<(&AtomType, &Transform, &Velocity, &Force)>,
+    atom_query: &Query<(&Atom, &Transform, &Velocity, &Force)>,
 ) -> Option<String> {
     if let Some(angle) = connectivity.angles.iter().find(|a| {
         entities.contains(&a.a) && entities.contains(&a.center) && entities.contains(&a.b)
@@ -203,11 +216,11 @@ fn display_angle_info(
             ],
         ) = atom_query.get_many([angle.a, angle.center, angle.b])
         {
-            if let Some(&(_k, theta0)) =
-                force_field
-                    .angle_params
-                    .get(&(*type_a, *type_center, *type_b))
-            {
+            if let Some(&(_k, theta0)) = force_field.angle_params.get(&(
+                type_a.type_name.clone(),
+                type_center.type_name.clone(),
+                type_b.type_name.clone(),
+            )) {
                 let v1 = t_a.translation - t_center.translation;
                 let v2 = t_b.translation - t_center.translation;
                 let current_angle_rad = v1.angle_between(v2);
@@ -215,7 +228,7 @@ fn display_angle_info(
                 let id_center = atom_id_map.entity_to_id.get(&angle.center).unwrap();
                 let id_b = atom_id_map.entity_to_id.get(&angle.b).unwrap();
                 return Some(format!(
-                    "Selected Angle:\n{}-{}-{}\n\
+                    "Selected Angle: {}-{}-{}\n\
                      --- Geometry ---\n\
                      Optimal: {:.2}deg\n\
                      Current: {:.2}deg ({:+.2})",
@@ -237,7 +250,7 @@ fn update_info_panel(
     connectivity: Res<SystemConnectivity>,
     force_field: Res<ForceField>,
     atom_id_map: Res<AtomIdMap>,
-    atom_query: Query<(&AtomType, &Transform, &Velocity, &Force)>,
+    atom_query: Query<(&Atom, &Transform, &Velocity, &Force)>,
     panel_query: Query<Entity, With<DebugInfoPanel>>,
     mut writer: TextUiWriter,
 ) {

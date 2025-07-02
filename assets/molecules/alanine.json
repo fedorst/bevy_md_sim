@@ -1,0 +1,33 @@
+{
+  "name": "Alanine (Zwitterion)",
+  "atoms": [
+    { "id": "N", "type_name": "N_PLUS", "pos": [0.126, 0.062, 0.0] },
+    { "id": "CA", "type_name": "CT", "pos": [0.0, -0.06, 0.0] },
+    { "id": "C", "type_name": "C_CO", "pos": [-0.124, -0.007, 0.0] },
+    { "id": "O1", "type_name": "O_COO", "pos": [-0.198, 0.101, 0.0] },
+    { "id": "O2", "type_name": "O_COO", "pos": [-0.158, -0.122, 0.0] },
+    { "id": "H_N1", "type_name": "H_O", "pos": [0.18, 0.11, -0.08] },
+    { "id": "H_N2", "type_name": "H_O", "pos": [0.18, 0.11, 0.08] },
+    { "id": "H_N3", "type_name": "H_O", "pos": [0.16, -0.03, 0.0] },
+    { "id": "H_CA", "type_name": "H_C", "pos": [0.03, -0.12, 0.08] },
+
+    { "id": "CB", "type_name": "CT", "pos": [0.0, -0.15, -0.12] },
+    { "id": "H_CB1", "type_name": "H_C", "pos": [0.0, -0.1, -0.2] },
+    { "id": "H_CB2", "type_name": "H_C", "pos": [0.08, -0.22, -0.12] },
+    { "id": "H_CB3", "type_name": "H_C", "pos": [-0.08, -0.22, -0.12] }
+  ],
+  "bonds": [
+    ["N", "CA"],
+    ["CA", "C"],
+    ["C", "O1"],
+    ["C", "O2"],
+    ["N", "H_N1"],
+    ["N", "H_N2"],
+    ["N", "H_N3"],
+    ["CA", "H_CA"],
+    ["CA", "CB"],
+    ["CB", "H_CB1"],
+    ["CB", "H_CB2"],
+    ["CB", "H_CB3"]
+  ]
+}

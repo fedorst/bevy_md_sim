@@ -1,5 +1,5 @@
-use crate::components::AtomType;
 use bevy::prelude::*;
+use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 
 // data structures used by resources
@@ -7,6 +7,7 @@ use std::collections::{HashMap, HashSet};
 pub struct Bond {
     pub a: Entity,
     pub b: Entity,
+    pub order: BondOrder,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -14,6 +15,11 @@ pub struct Angle {
     pub a: Entity,
     pub center: Entity,
     pub b: Entity,
+}
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum BondOrder {
+    Single,
+    Double,
 }
 
 // resources
@@ -50,97 +56,85 @@ pub struct SystemEnergy {
     pub total: f32,
 }
 
+// --- Structs for Deserializing the Force Field File ---
+#[derive(Deserialize, Debug, Clone)]
+pub struct AtomTypeParam {
+    pub element: String,
+    pub mass: f32,
+    pub charge: f32,
+    pub sigma: f32,
+    pub epsilon: f32,
+}
+
+#[derive(Deserialize, Debug)]
+struct BondParam {
+    types: [String; 2],
+    order: String, // "Single" or "Double"
+    k: f32,
+    r0: f32,
+}
+
+#[derive(Deserialize, Debug)]
+struct AngleParam {
+    types: [String; 3],
+    k: f32,
+    theta0_deg: f32,
+}
+
+#[derive(Deserialize, Debug)]
+struct ForceFieldFile {
+    atom_types: HashMap<String, AtomTypeParam>,
+    bonds: Vec<BondParam>,
+    angles: Vec<AngleParam>,
+}
+
 #[derive(Resource, Default)]
 pub struct SystemConnectivity {
     pub bonds: Vec<Bond>,
     pub angles: Vec<Angle>,
 }
 
-#[derive(Resource, Debug)]
+#[derive(Resource, Debug, Default)]
 pub struct ForceField {
-    pub bond_params: HashMap<(AtomType, AtomType), (f32, f32)>,
-    pub angle_params: HashMap<(AtomType, AtomType, AtomType), (f32, f32)>,
+    pub atom_types: HashMap<String, AtomTypeParam>,
+    pub bond_params: HashMap<(String, String, BondOrder), (f32, f32)>,
+    pub angle_params: HashMap<(String, String, String), (f32, f32)>,
     pub coulomb_k: f32,
 }
 
-impl Default for ForceField {
-    fn default() -> Self {
+impl ForceField {
+    pub fn from_file(path: &str) -> Self {
+        let file_contents = std::fs::read_to_string(path)
+            .unwrap_or_else(|_| panic!("Failed to read force field file at {}", path));
+        let ff_file: ForceFieldFile =
+            serde_json::from_str(&file_contents).expect("Failed to parse force field JSON");
         let mut bond_params = HashMap::new();
-        // Insert params for both orders (C,O) and (O,C) for easier lookup
-        // OPLS-AA parameters
-        // C-C bond
-        bond_params.insert((AtomType::Carbon, AtomType::Carbon), (224262.4, 0.1529));
-        // C-H bond
-        bond_params.insert((AtomType::Carbon, AtomType::Hydrogen), (284512.0, 0.1090));
-        bond_params.insert((AtomType::Hydrogen, AtomType::Carbon), (284512.0, 0.1090));
-        // C-O bond
-        bond_params.insert((AtomType::Carbon, AtomType::Oxygen), (267776.0, 0.1410));
-        bond_params.insert((AtomType::Oxygen, AtomType::Carbon), (267776.0, 0.1410));
-        // O-H bond
-        bond_params.insert((AtomType::Oxygen, AtomType::Hydrogen), (462750.4, 0.0945));
-        bond_params.insert((AtomType::Hydrogen, AtomType::Oxygen), (462750.4, 0.0945));
-        // C-N bond
-        bond_params.insert((AtomType::Carbon, AtomType::Nitrogen), (334720.0, 0.147));
-        bond_params.insert((AtomType::Nitrogen, AtomType::Carbon), (334720.0, 0.147));
-        // N-H bond
-        bond_params.insert((AtomType::Nitrogen, AtomType::Hydrogen), (389112.0, 0.101));
-        bond_params.insert((AtomType::Hydrogen, AtomType::Nitrogen), (389112.0, 0.101));
+        for p in ff_file.bonds {
+            let order = if p.order == "Double" {
+                BondOrder::Double
+            } else {
+                BondOrder::Single
+            };
+            bond_params.insert((p.types[0].clone(), p.types[1].clone(), order), (p.k, p.r0));
+            bond_params.insert((p.types[1].clone(), p.types[0].clone(), order), (p.k, p.r0));
+        }
 
         let mut angle_params = HashMap::new();
-        // C-C-H angle
-        angle_params.insert(
-            (AtomType::Carbon, AtomType::Carbon, AtomType::Hydrogen),
-            (292.88, 110.7f32.to_radians()),
-        );
-        angle_params.insert(
-            (AtomType::Hydrogen, AtomType::Carbon, AtomType::Carbon),
-            (292.88, 110.7f32.to_radians()),
-        );
-        // H-C-H angle
-        angle_params.insert(
-            (AtomType::Hydrogen, AtomType::Carbon, AtomType::Hydrogen),
-            (276.144, 107.8f32.to_radians()),
-        );
-        // C-C-O angle
-        angle_params.insert(
-            (AtomType::Carbon, AtomType::Carbon, AtomType::Oxygen),
-            (418.4, 108.5f32.to_radians()),
-        );
-        angle_params.insert(
-            (AtomType::Oxygen, AtomType::Carbon, AtomType::Carbon),
-            (418.4, 108.5f32.to_radians()),
-        );
-        // C-O-H angle
-        angle_params.insert(
-            (AtomType::Carbon, AtomType::Oxygen, AtomType::Hydrogen),
-            (460.24, 108.5f32.to_radians()),
-        );
-        angle_params.insert(
-            (AtomType::Hydrogen, AtomType::Oxygen, AtomType::Carbon),
-            (460.24, 108.5f32.to_radians()),
-        );
 
-        // C-N-H angle
-        angle_params.insert(
-            (AtomType::Carbon, AtomType::Nitrogen, AtomType::Hydrogen),
-            (292.88, 109.5f32.to_radians()),
-        );
-        angle_params.insert(
-            (AtomType::Hydrogen, AtomType::Nitrogen, AtomType::Carbon),
-            (292.88, 109.5f32.to_radians()),
-        );
-        // H-N-H angle
-        angle_params.insert(
-            (AtomType::Hydrogen, AtomType::Nitrogen, AtomType::Hydrogen),
-            (292.88, 107.0f32.to_radians()),
-        );
-        // C-N-C angle
-        angle_params.insert(
-            (AtomType::Carbon, AtomType::Nitrogen, AtomType::Carbon),
-            (418.4, 112.0f32.to_radians()),
-        );
+        for p in ff_file.angles {
+            let theta_rad = p.theta0_deg.to_radians();
+            angle_params.insert(
+                (p.types[0].clone(), p.types[1].clone(), p.types[2].clone()),
+                (p.k, theta_rad),
+            );
+            angle_params.insert(
+                (p.types[2].clone(), p.types[1].clone(), p.types[0].clone()),
+                (p.k, theta_rad),
+            );
+        }
 
         Self {
+            atom_types: ff_file.atom_types,
             bond_params,
             angle_params,
             coulomb_k: 138.935458,

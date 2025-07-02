@@ -1,13 +1,13 @@
 {
   "name": "Methylamine",
   "atoms": [
-    { "id": "C1", "type": "Carbon", "pos": [0.071, 0.0, 0.0] },
-    { "id": "N1", "type": "Nitrogen", "pos": [-0.076, 0.0, 0.0] },
-    { "id": "H_C1_1", "type": "Hydrogen", "pos": [0.108, 0.0, 0.108] },
-    { "id": "H_C1_2", "type": "Hydrogen", "pos": [0.108, 0.088, -0.063] },
-    { "id": "H_C1_3", "type": "Hydrogen", "pos": [0.108, -0.088, -0.063] },
-    { "id": "H_N1_1", "type": "Hydrogen", "pos": [-0.113, 0.082, 0.0] },
-    { "id": "H_N1_2", "type": "Hydrogen", "pos": [-0.113, -0.082, 0.0] }
+    { "id": "C1", "type_name": "CT", "pos": [0.071, 0.0, 0.0] },
+    { "id": "N1", "type_name": "N_AMINE", "pos": [-0.076, 0.0, 0.0] },
+    { "id": "H_C1_1", "type_name": "H_C", "pos": [0.108, 0.0, 0.108] },
+    { "id": "H_C1_2", "type_name": "H_C", "pos": [0.108, 0.088, -0.063] },
+    { "id": "H_C1_3", "type_name": "H_C", "pos": [0.108, -0.088, -0.063] },
+    { "id": "H_N1_1", "type_name": "H_O", "pos": [-0.113, 0.082, 0.0] },
+    { "id": "H_N1_2", "type_name": "H_O", "pos": [-0.113, -0.082, 0.0] }
   ],
   "bonds": [
     ["N1", "C1"],

@@ -1,0 +1,124 @@
+{
+  "atom_types": {
+    "CT": {
+      "element": "C",
+      "mass": 12.011,
+      "charge": -0.1,
+      "sigma": 0.35,
+      "epsilon": 0.27614
+    },
+    "C_CO": {
+      "element": "C",
+      "mass": 12.011,
+      "charge": 0.55,
+      "sigma": 0.35,
+      "epsilon": 0.27614
+    },
+    "H_C": {
+      "element": "H",
+      "mass": 1.0,
+      "charge": 0.06,
+      "sigma": 0.225,
+      "epsilon": 0.19246
+    },
+    "O_H": {
+      "element": "O",
+      "mass": 15.999,
+      "charge": -0.683,
+      "sigma": 0.3166,
+      "epsilon": 0.71128
+    },
+    "H_O": {
+      "element": "H",
+      "mass": 1.0,
+      "charge": 0.418,
+      "sigma": 0.225,
+      "epsilon": 0.19246
+    },
+    "O_CO": {
+      "element": "O",
+      "mass": 15.999,
+      "charge": -0.5,
+      "sigma": 0.3166,
+      "epsilon": 0.71128
+    },
+    "N_AMINE": {
+      "element": "N",
+      "mass": 14.007,
+      "charge": -1.05,
+      "sigma": 0.325,
+      "epsilon": 0.71128
+    },
+    "N_PLUS": {
+      "element": "N",
+      "mass": 14.007,
+      "charge": -0.4,
+      "sigma": 0.325,
+      "epsilon": 0.71128
+    },
+    "O_COO": {
+      "element": "O",
+      "mass": 15.999,
+      "charge": -0.8,
+      "sigma": 0.296,
+      "epsilon": 0.87864
+    }
+  },
+  "bonds": [
+    { "types": ["CT", "CT"], "order": "Single", "k": 224262.4, "r0": 0.1529 },
+    { "types": ["CT", "H_C"], "order": "Single", "k": 284512.0, "r0": 0.109 },
+    { "types": ["CT", "O_H"], "order": "Single", "k": 267776.0, "r0": 0.141 },
+    { "types": ["O_H", "H_O"], "order": "Single", "k": 462750.4, "r0": 0.0945 },
+    {
+      "types": ["C_CO", "O_CO"],
+      "order": "Double",
+      "k": 585760.0,
+      "r0": 0.121
+    },
+    { "types": ["C_CO", "CT"], "order": "Single", "k": 224262.4, "r0": 0.1529 },
+    { "types": ["C_CO", "H_C"], "order": "Single", "k": 284512.0, "r0": 0.109 },
+    {
+      "types": ["CT", "N_PLUS"],
+      "order": "Single",
+      "k": 334720.0,
+      "r0": 0.147
+    },
+    {
+      "types": ["N_PLUS", "H_O"],
+      "order": "Single",
+      "k": 389112.0,
+      "r0": 0.101
+    },
+    {
+      "types": ["C_CO", "O_COO"],
+      "order": "Single",
+      "k": 577392.0,
+      "r0": 0.125
+    },
+    {
+      "types": ["CT", "N_AMINE"],
+      "order": "Single",
+      "k": 334720.0,
+      "r0": 0.147
+    },
+    {
+      "types": ["N_AMINE", "H_O"],
+      "order": "Single",
+      "k": 389112.0,
+      "r0": 0.101
+    }
+  ],
+  "angles": [
+    { "types": ["H_C", "CT", "H_C"], "k": 276.144, "theta0_deg": 107.8 },
+    { "types": ["CT", "CT", "H_C"], "k": 292.88, "theta0_deg": 110.7 },
+    { "types": ["CT", "CT", "O_H"], "k": 418.4, "theta0_deg": 108.5 },
+    { "types": ["CT", "O_H", "H_O"], "k": 460.24, "theta0_deg": 108.5 },
+    { "types": ["CT", "C_CO", "O_CO"], "k": 669.44, "theta0_deg": 120.0 },
+    { "types": ["CT", "C_CO", "H_C"], "k": 292.88, "theta0_deg": 120.0 },
+    { "types": ["O_COO", "C_CO", "O_COO"], "k": 669.44, "theta0_deg": 126.0 },
+    { "types": ["O_COO", "C_CO", "CT"], "k": 669.44, "theta0_deg": 117.0 },
+    { "types": ["CT", "N_AMINE", "H_O"], "k": 292.88, "theta0_deg": 109.5 },
+    { "types": ["H_O", "N_AMINE", "H_O"], "k": 292.88, "theta0_deg": 107.0 },
+    { "types": ["H_C", "CT", "N_AMINE"], "k": 292.88, "theta0_deg": 110.7 }
+  ]
+}

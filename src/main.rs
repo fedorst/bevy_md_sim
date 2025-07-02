@@ -11,23 +11,11 @@ use bevy::prelude::*;
 use bevy_panorbit_camera::PanOrbitCameraPlugin;
 use clap::Parser;
 use interaction::InteractionPlugin;
-use resources::*; // Import all resourcesuse bevy_panorbit_camera::PanOrbitCameraPlugin;
+use resources::*;
 use setup::SetupPlugin;
 use simulation::SimulationPlugin;
 use ui::UIPlugin;
 use visualization::VisualizationPlugin;
-// We will create the CorePlugin here now, as it just initializes resources.
-use resources::{MoleculeSelection, SimulationParameters, SimulationState, Thermostat};
-// | ID | Feature | Status | Effort | Notes |
-// | :--- | :--- | :--- | :--- | :--- |
-// | 7 | **Create/Delete Bonds (Shift+Select)**| To Do | **MEDIUM** | Involves managing multi-selection state, checking for key modifiers, and editing `SystemConnectivity`. A great next step for interactivity. |
-// | 9 | **Implement Double Bonds** | To Do | **MEDIUM** | This is more of a core simulation feature. It requires changing `Bond` data structures and the force calculation logic. |
-// | 13 | **Further UI Improvements** | To Do | **MEDIUM** | A good example would be adding buttons for "Pause/Play" or "Reset Simulation" instead of using keyboard-only controls. |
-// | --- | | | | |
-// | 1 | **Marquee (Rectangle) Select** | To Do | **HIGH** | Requires complex logic for 2D-to-3D space conversion, managing a selection box, and checking many entities against it. |
-// | 4 | **Draggable Atoms** | To Do | **HIGH** | Requires implementing a 3D translation gizmo or integrating a library for it, which is a significant task. |
-// | 6 | **Add Atoms from a Sidebar** | To Do | **HIGH** | This is a major feature requiring significant UI work (e.g., `bevy_egui`) and new spawning/state management logic. |
-// | 11| **Playback System** | To Do | **HIGH** | Involves serializing the entire system state each frame and building a separate playback mode and UI. Very complex. |
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -57,8 +45,14 @@ pub struct CorePlugin;
 
 impl Plugin for CorePlugin {
     fn build(&self, app: &mut App) {
-        // This is the entire contents of the old CorePlugin
-        app.init_resource::<ForceField>()
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+        let ff_path = std::path::Path::new(&manifest_dir)
+            .join("assets/force_field.json")
+            .to_str()
+            .unwrap()
+            .to_string();
+
+        app.insert_resource(ForceField::from_file(&ff_path))
             .init_resource::<SystemConnectivity>()
             .init_resource::<StepSimulation>()
             .init_resource::<StepCount>()

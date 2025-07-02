@@ -1,5 +1,7 @@
-use crate::components::{AtomType, BondVisualization, Force, Velocity};
-use crate::resources::{Angle, Bond, ForceField, SharedAssetHandles, SystemConnectivity};
+use crate::components::{Atom, BondVisualization, Force, Velocity};
+use crate::resources::{
+    Angle, Bond, BondOrder, ForceField, SharedAssetHandles, SystemConnectivity,
+};
 use crate::simulation::PhysicsSet;
 use crate::visualization::VisualizationSet;
 use bevy::color::palettes::basic::{BLACK, BLUE, RED};
@@ -11,6 +13,7 @@ use bevy_picking::{
     hover::PickingInteraction,
 };
 use std::collections::HashMap;
+
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct InteractionSet;
 
@@ -45,7 +48,7 @@ fn manage_bonds(
     mut commands: Commands,
     mut connectivity: ResMut<SystemConnectivity>,
     force_field: Res<ForceField>,
-    atom_query: Query<&AtomType>,
+    atom_query: Query<&Atom>,
     mut bond_vis_query: Query<(Entity, &BondVisualization)>,
     shared_handles: Res<SharedAssetHandles>,
 ) {
@@ -74,13 +77,21 @@ fn manage_bonds(
             };
 
             // Check if parameters exist for this bond type
-            if force_field.bond_params.contains_key(&(*type1, *type2)) {
+            if force_field.bond_params.contains_key(&(
+                type1.type_name.clone(),
+                type2.type_name.clone(),
+                BondOrder::Single,
+            )) {
                 info!("Creating bond between {:?} and {:?}", e1, e2);
-                connectivity.bonds.push(Bond { a: e1, b: e2 });
+                connectivity.bonds.push(Bond {
+                    a: e1,
+                    b: e2,
+                    order: BondOrder::Single,
+                });
             } else {
                 warn!(
                     "Cannot create bond: No parameters found for bond type {:?}-{:?}",
-                    type1, type2
+                    type1.type_name, type2.type_name
                 );
                 // Abort without rebuilding if params are missing
                 return;
@@ -120,15 +131,23 @@ fn rebuild_connectivity_and_visuals(
         adjacency.entry(bond.b).or_default().push(bond.a);
 
         // Spawn the new visual for this bond
-        commands.spawn((
-            Mesh3d(shared_handles.bond_mesh.clone()),
-            MeshMaterial3d(shared_handles.bond_material.clone()),
-            Transform::default(),
-            BondVisualization {
-                atom1: bond.a,
-                atom2: bond.b,
-            },
-        ));
+        let num_strands = match bond.order {
+            BondOrder::Single => 1,
+            BondOrder::Double => 2,
+        };
+        for i in 0..num_strands {
+            commands.spawn((
+                Mesh3d(shared_handles.bond_mesh.clone()),
+                MeshMaterial3d(shared_handles.bond_material.clone()),
+                Transform::default(),
+                BondVisualization {
+                    atom1: bond.a,
+                    atom2: bond.b,
+                    strand_index: i,
+                    total_strands: num_strands,
+                },
+            ));
+        }
     }
 
     // Generate angles from the now-complete adjacency list
@@ -162,7 +181,7 @@ pub struct SelectionState {
 fn handle_selection(
     trigger: Trigger<Pointer<Click>>,
     mut selection: ResMut<SelectionState>,
-    atoms: Query<&AtomType>,
+    atoms: Query<&Atom>,
     keys: Res<ButtonInput<KeyCode>>,
 ) {
     let target = trigger.target();
@@ -236,7 +255,7 @@ fn update_highlights(
             &PickingInteraction,
             &MeshMaterial3d<StandardMaterial>,
         ),
-        With<AtomType>,
+        With<Atom>,
     >,
 ) {
     for (entity, interaction, material_handle_comp) in &query {
@@ -256,7 +275,7 @@ fn update_highlights(
 
 fn draw_selection_gizmos(
     selection: Res<SelectionState>,
-    atom_query: Query<(&Transform, &Force, &Velocity), With<AtomType>>,
+    atom_query: Query<(&Transform, &Force, &Velocity), With<Atom>>,
     mut gizmos: Gizmos,
 ) {
     gizmos.clear();
@@ -278,7 +297,7 @@ fn focus_camera_on_selection(
     keys: Res<ButtonInput<KeyCode>>,
     selection: Res<SelectionState>,
     mut camera_query: Query<&mut PanOrbitCamera>,
-    atom_query: Query<&Transform, With<AtomType>>,
+    atom_query: Query<&Transform, With<Atom>>,
 ) {
     if keys.just_pressed(KeyCode::KeyF) {
         if let Some(&entity_to_focus_on) = selection.selected.last() {

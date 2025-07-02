@@ -1,6 +1,6 @@
 use super::components::*;
 use super::config::MoleculeConfig;
-use super::resources::*;
+use super::resources::{BondOrder, *};
 use bevy::prelude::*;
 use bevy_panorbit_camera::PanOrbitCamera;
 use std::collections::{HashMap, HashSet};
@@ -39,6 +39,7 @@ fn load_molecule_from_config(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut connectivity: ResMut<SystemConnectivity>,
+    force_field: Res<ForceField>,
     molecule_selection: Res<MoleculeSelection>,
     mut atom_id_map: ResMut<AtomIdMap>,
 ) {
@@ -56,30 +57,53 @@ fn load_molecule_from_config(
 
     info!("Spawning atoms for: {}", molecule_config.name);
 
-    let atom_mesh_map: HashMap<AtomType, Handle<Mesh>> = [
-        (AtomType::Carbon, meshes.add(Sphere::new(0.07))),
-        (AtomType::Oxygen, meshes.add(Sphere::new(0.06))),
-        (AtomType::Hydrogen, meshes.add(Sphere::new(0.04))),
-        (AtomType::Nitrogen, meshes.add(Sphere::new(0.065))),
-    ]
-    .into_iter()
-    .collect();
+    // let atom_mesh_map: HashMap<AtomType, Handle<Mesh>> = [
+    //     (AtomType::Carbon, meshes.add(Sphere::new(0.06))),
+    //     (AtomType::Oxygen, meshes.add(Sphere::new(0.05))),
+    //     (AtomType::Hydrogen, meshes.add(Sphere::new(0.035))),
+    //     (AtomType::Nitrogen, meshes.add(Sphere::new(0.055))),
+    //     (AtomType::CarboxylateOxygen, meshes.add(Sphere::new(0.05))), // Same size as other O
+    //     (AtomType::ChargedNitrogen, meshes.add(Sphere::new(0.055))),  // Same size as other N
+    // ]
+    // .into_iter()
+    // .collect();
+
+    let mut element_mesh_map: HashMap<String, Handle<Mesh>> = HashMap::new();
 
     let mut id_to_entity_map = HashMap::new();
     for atom_spec in &molecule_config.atoms {
-        let core_atom_type: AtomType = atom_spec.atom_type.into();
+        // let core_atom_type: AtomType = atom_spec.atom_type.into();
+        let atom_params = force_field.atom_types.get(&atom_spec.type_name).unwrap();
+        let element_str = &atom_params.element;
+
+        let mesh_handle = element_mesh_map
+            .entry(element_str.clone())
+            .or_insert_with(|| {
+                let radius = match element_str.as_str() {
+                    "C" => 0.06,
+                    "O" => 0.05,
+                    "H" => 0.03,
+                    "N" => 0.055,
+                    _ => 0.045,
+                };
+                meshes.add(Sphere::new(radius))
+            });
+
         let entity = commands
             .spawn((
-                core_atom_type,
+                Atom {
+                    type_name: atom_spec.type_name.clone(),
+                },
                 Force::default(),
                 Velocity(Vec3::ZERO),
                 Acceleration(Vec3::ZERO),
-                Mesh3d(atom_mesh_map[&core_atom_type].clone()),
-                MeshMaterial3d(materials.add(match core_atom_type {
-                    AtomType::Carbon => Color::srgb(0.2, 0.2, 0.2),
-                    AtomType::Oxygen => Color::srgb(1.0, 0.1, 0.1),
-                    AtomType::Hydrogen => Color::srgb(0.9, 0.9, 0.9),
-                    AtomType::Nitrogen => Color::srgb(0.1, 0.1, 1.0),
+                Mesh3d(mesh_handle.clone()),
+                MeshMaterial3d(materials.add(match element_str.as_str() {
+                    "C" => Color::srgb(0.2, 0.2, 0.2),
+                    "O" => Color::srgb(1.0, 0.1, 0.1),
+                    "H" => Color::srgb(0.9, 0.9, 0.9),
+                    "N" => Color::srgb(0.1, 0.1, 1.0),
+                    _ => Color::srgb(1.0, 0.2, 0.8), // Default pink
                 })),
                 Transform::from_translation(Vec3::from(atom_spec.pos)),
             ))
@@ -98,9 +122,24 @@ fn load_molecule_from_config(
         connectivity.bonds.push(Bond {
             a: *entity1,
             b: *entity2,
+            order: BondOrder::Single,
         });
     }
-    let bond_mesh_handle = meshes.add(Cylinder::new(0.02, 1.0));
+
+    info!("Building double bond list (if any)...");
+    if let Some(double_bonds) = molecule_config.double_bonds {
+        for bond_spec in &double_bonds {
+            let entity1 = id_to_entity_map.get(&bond_spec[0]).unwrap();
+            let entity2 = id_to_entity_map.get(&bond_spec[1]).unwrap();
+            connectivity.bonds.push(Bond {
+                a: *entity1,
+                b: *entity2,
+                order: BondOrder::Double,
+            });
+        }
+    }
+
+    let bond_mesh_handle = meshes.add(Cylinder::new(0.015, 1.0));
     let bond_material_handle = materials.add(Color::srgb(0.8, 0.8, 0.2));
 
     commands.insert_resource(SharedAssetHandles {
@@ -172,14 +211,23 @@ fn spawn_bond_visuals(
 ) {
     info!("Spawning initial bond visuals...");
     for bond in &connectivity.bonds {
-        commands.spawn((
-            Mesh3d(shared_handles.bond_mesh.clone()),
-            MeshMaterial3d(shared_handles.bond_material.clone()),
-            Transform::default(),
-            BondVisualization {
-                atom1: bond.a,
-                atom2: bond.b,
-            },
-        ));
+        let num_strands = match bond.order {
+            BondOrder::Single => 1,
+            BondOrder::Double => 2,
+        };
+
+        for i in 0..num_strands {
+            commands.spawn((
+                Mesh3d(shared_handles.bond_mesh.clone()),
+                MeshMaterial3d(shared_handles.bond_material.clone()),
+                Transform::default(),
+                BondVisualization {
+                    atom1: bond.a,
+                    atom2: bond.b,
+                    strand_index: i,
+                    total_strands: num_strands,
+                },
+            ));
+        }
     }
 }

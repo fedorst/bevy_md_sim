@@ -1,0 +1,26 @@
+{
+  "name": "Glycine (Zwitterion)",
+  "atoms": [
+    { "id": "N", "type_name": "N_PLUS", "pos": [-0.063, 0.058, 0.0] },
+    { "id": "CA", "type_name": "CT", "pos": [0.0, -0.06, 0.0] },
+    { "id": "C", "type_name": "C_CO", "pos": [0.145, -0.02, 0.0] },
+    { "id": "O1", "type_name": "O_COO", "pos": [0.19, 0.09, 0.0] },
+    { "id": "O2", "type_name": "O_COO", "pos": [0.21, -0.12, 0.0] },
+    { "id": "H_N1", "type_name": "H_O", "pos": [-0.06, 0.11, -0.087] },
+    { "id": "H_N2", "type_name": "H_O", "pos": [-0.06, 0.11, 0.087] },
+    { "id": "H_N3", "type_name": "H_O", "pos": [-0.15, 0.0, 0.0] },
+    { "id": "H_CA1", "type_name": "H_C", "pos": [-0.03, -0.11, 0.087] },
+    { "id": "H_CA2", "type_name": "H_C", "pos": [-0.03, -0.11, -0.087] }
+  ],
+  "bonds": [
+    ["N", "CA"],
+    ["CA", "C"],
+    ["C", "O1"],
+    ["C", "O2"],
+    ["N", "H_N1"],
+    ["N", "H_N2"],
+    ["N", "H_N3"],
+    ["CA", "H_CA1"],
+    ["CA", "H_CA2"]
+  ]
+}

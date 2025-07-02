@@ -1,4 +1,4 @@
-use crate::components::{Acceleration, AtomType, Force, Velocity};
+use crate::components::{Acceleration, Atom, Force, Velocity};
 use crate::resources::*;
 use bevy::prelude::*;
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
@@ -38,9 +38,10 @@ fn reset_forces(mut query: Query<&mut Force>) {
 }
 
 fn apply_thermostat(
-    mut query: Query<(&mut Velocity, &AtomType)>,
+    mut query: Query<(&mut Velocity, &Atom)>,
     params: Res<SimulationParameters>,
     thermostat: Res<Thermostat>,
+    force_field: Res<ForceField>,
     mut current_temp_res: ResMut<CurrentTemperature>,
     mut thermostat_scale_res: ResMut<ThermostatScale>,
 ) {
@@ -49,8 +50,9 @@ fn apply_thermostat(
     if num_atoms == 0 {
         return;
     }
-    for (velocity, atom_type) in &query {
-        total_ke += 0.5 * atom_type.mass() * velocity.length_squared();
+    for (velocity, atom) in &query {
+        let mass = force_field.atom_types[&atom.type_name].mass;
+        total_ke += 0.5 * mass * velocity.length_squared();
     }
     // Degrees of Freedom: 3 for each atom, minus 3 for the center of mass motion.
     let dof = (3 * num_atoms - 3) as f32;
@@ -93,18 +95,20 @@ fn integrate_position_and_half_velocity(
 }
 
 fn finish_velocity_update(
-    mut query: Query<(&mut Velocity, &mut Acceleration, &Force, &AtomType)>,
+    mut query: Query<(&mut Velocity, &mut Acceleration, &Force, &Atom)>,
     params: Res<SimulationParameters>,
+    force_field: Res<ForceField>,
 ) {
-    for (mut velocity, mut acceleration, force, atom_type) in &mut query {
-        let new_acceleration = force.total / atom_type.mass();
+    for (mut velocity, mut acceleration, force, atom) in &mut query {
+        let mass = force_field.atom_types[&atom.type_name].mass;
+        let new_acceleration = force.total / mass;
         velocity.0 += 0.5 * new_acceleration * params.dt;
         acceleration.0 = new_acceleration;
     }
 }
 
 fn calculate_non_bonded_forces(
-    mut query: Query<(Entity, &AtomType, &GlobalTransform, &mut Force)>,
+    mut query: Query<(Entity, &Atom, &GlobalTransform, &mut Force)>,
     force_field: Res<ForceField>,
     excluded: Res<ExcludedPairs>,
     mut energy: ResMut<SystemEnergy>,
@@ -112,8 +116,8 @@ fn calculate_non_bonded_forces(
     let mut combinations = query.iter_combinations_mut();
     while let Some(
         [
-            (e1, atom1, transform1, mut force1),
-            (e2, atom2, transform2, mut force2),
+            (e1, atom1_comp, transform1, mut force1),
+            (e2, atom2_comp, transform2, mut force2),
         ],
     ) = combinations.fetch_next()
     {
@@ -130,8 +134,10 @@ fn calculate_non_bonded_forces(
         let r = r_sq.sqrt();
 
         // Use atom-type specific parameters with Lorentz-Berthelot mixing rules
-        let epsilon = (atom1.epsilon() * atom2.epsilon()).sqrt();
-        let sigma = (atom1.sigma() + atom2.sigma()) * 0.5;
+        let p1 = &force_field.atom_types[&atom1_comp.type_name];
+        let p2 = &force_field.atom_types[&atom2_comp.type_name];
+        let epsilon = (p1.epsilon * p2.epsilon).sqrt();
+        let sigma = (p1.sigma + p2.sigma) * 0.5;
 
         // Only calculate LJ if epsilon is non-zero
         let lj_force_mag = if epsilon > 0.0 {
@@ -147,8 +153,8 @@ fn calculate_non_bonded_forces(
         };
 
         // -- Electrostatics (Coulomb's Law) --
-        let q1 = atom1.charge();
-        let q2 = atom2.charge();
+        let q1 = p1.charge;
+        let q2 = p2.charge;
 
         let coulomb_scale = if excluded.one_three.contains(&key) {
             0.5 // Scaling factor for 1-3 pairs
@@ -172,11 +178,13 @@ fn reset_energy(mut energy: ResMut<SystemEnergy>) {
 
 fn calculate_kinetic_energy(
     mut energy: ResMut<SystemEnergy>,
-    query: Query<(&AtomType, &Velocity)>,
+    query: Query<(&Atom, &Velocity)>,
+    force_field: Res<ForceField>,
 ) {
     let mut kinetic_energy = 0.0;
     for (atom_type, velocity) in &query {
-        kinetic_energy += 0.5 * atom_type.mass() * velocity.length_squared();
+        let mass = force_field.atom_types[&atom_type.type_name].mass;
+        kinetic_energy += 0.5 * mass * velocity.length_squared();
     }
     energy.kinetic = kinetic_energy;
     energy.total = energy.potential + energy.kinetic;
@@ -191,7 +199,7 @@ fn sum_total_forces(mut query: Query<&mut Force>) {
 // System 3: Calculate angle forces
 fn calculate_angle_forces(
     connectivity: Res<SystemConnectivity>,
-    mut atom_query: Query<(&Transform, &mut Force, &AtomType)>,
+    mut atom_query: Query<(&Transform, &mut Force, &Atom)>,
     force_field: Res<ForceField>,
     mut energy: ResMut<SystemEnergy>,
 ) {
@@ -207,11 +215,11 @@ fn calculate_angle_forces(
             continue;
         };
 
-        if let Some(&(angle_k, angle_theta0)) =
-            force_field
-                .angle_params
-                .get(&(*type1, *type_center, *type2))
-        {
+        if let Some(&(angle_k, angle_theta0)) = force_field.angle_params.get(&(
+            type1.type_name.clone(),
+            type_center.type_name.clone(),
+            type2.type_name.clone(),
+        )) {
             let v1 = t1.translation - t_center.translation;
             let v2 = t2.translation - t_center.translation;
             let theta = v1.angle_between(v2);
@@ -234,7 +242,7 @@ fn calculate_angle_forces(
 
 fn calculate_bond_forces(
     connectivity: Res<SystemConnectivity>,
-    mut atom_query: Query<(&Transform, &mut Force, &AtomType)>,
+    mut atom_query: Query<(&Transform, &mut Force, &Atom)>,
     force_field: Res<ForceField>,
     mut energy: ResMut<SystemEnergy>,
 ) {
@@ -245,7 +253,11 @@ fn calculate_bond_forces(
             continue;
         };
 
-        if let Some(&(bond_k, bond_r0)) = force_field.bond_params.get(&(*type1, *type2)) {
+        if let Some(&(bond_k, bond_r0)) = force_field.bond_params.get(&(
+            type1.type_name.clone(),
+            type2.type_name.clone(),
+            bond.order,
+        )) {
             let vec = t2.translation - t1.translation;
             let r = vec.length();
             let force_magnitude = -bond_k * (r - bond_r0);
