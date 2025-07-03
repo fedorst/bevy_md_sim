@@ -110,14 +110,24 @@ fn apply_thermostat(
     mut thermostat_scale_res: ResMut<ThermostatScale>,
 ) {
     let mut total_ke = 0.0;
-    let num_atoms = query.iter().len();
+    let mut num_atoms = query.iter().len();
+
+    for (velocity, atom) in &query {
+        // SAFE LOOKUP
+        if let Some(atom_params) = force_field.atom_types.get(&atom.type_name) {
+            total_ke += 0.5 * atom_params.mass * velocity.length_squared();
+            num_atoms += 1;
+        } else {
+            warn!(
+                "Skipping atom with unknown type '{}' in thermostat calc",
+                atom.type_name
+            );
+        }
+    }
     if num_atoms == 0 {
         return;
     }
-    for (velocity, atom) in &query {
-        let mass = force_field.atom_types[&atom.type_name].mass;
-        total_ke += 0.5 * mass * velocity.length_squared();
-    }
+
     // Degrees of Freedom: 3 for each atom, minus 3 for the center of mass motion.
     let dof = (3 * num_atoms - 3) as f32;
     // The ideal gas constant R in units compatible with your simulation: kJ/(mol·K)
@@ -164,10 +174,16 @@ fn finish_velocity_update(
     force_field: Res<ForceField>,
 ) {
     for (mut velocity, mut acceleration, force, atom) in &mut query {
-        let mass = force_field.atom_types[&atom.type_name].mass;
-        let new_acceleration = force.total / mass;
-        velocity.0 += 0.5 * new_acceleration * params.dt;
-        acceleration.0 = new_acceleration;
+        if let Some(atom_params) = force_field.atom_types.get(&atom.type_name) {
+            let new_acceleration = force.total / atom_params.mass;
+            velocity.0 += 0.5 * new_acceleration * params.dt;
+            acceleration.0 = new_acceleration;
+        } else {
+            warn!(
+                "Skipping atom with unknown type '{}' in velocity update",
+                atom.type_name
+            );
+        }
     }
 }
 
@@ -198,8 +214,13 @@ fn calculate_non_bonded_forces(
         let r = r_sq.sqrt();
 
         // Use atom-type specific parameters with Lorentz-Berthelot mixing rules
-        let p1 = &force_field.atom_types[&atom1_comp.type_name];
-        let p2 = &force_field.atom_types[&atom2_comp.type_name];
+        let (Some(p1), Some(p2)) = (
+            force_field.atom_types.get(&atom1_comp.type_name),
+            force_field.atom_types.get(&atom2_comp.type_name),
+        ) else {
+            // If either atom type is unknown, we can't calculate non-bonded forces.
+            continue;
+        };
         let epsilon = (p1.epsilon * p2.epsilon).sqrt();
         let sigma = (p1.sigma + p2.sigma) * 0.5;
 
@@ -247,8 +268,15 @@ fn calculate_kinetic_energy(
 ) {
     let mut kinetic_energy = 0.0;
     for (atom_type, velocity) in &query {
-        let mass = force_field.atom_types[&atom_type.type_name].mass;
-        kinetic_energy += 0.5 * mass * velocity.length_squared();
+        // SAFE LOOKUP
+        if let Some(atom_params) = force_field.atom_types.get(&atom_type.type_name) {
+            kinetic_energy += 0.5 * atom_params.mass * velocity.length_squared();
+        } else {
+            warn!(
+                "Skipping atom with unknown type '{}' in kinetic energy calc",
+                atom_type.type_name
+            );
+        }
     }
     energy.kinetic = kinetic_energy;
     energy.total = energy.potential + energy.kinetic;

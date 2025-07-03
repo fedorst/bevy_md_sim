@@ -104,6 +104,13 @@
       "charge": -0.73,
       "sigma": 0.296,
       "epsilon": 0.87864
+    },
+    "H_N": {
+      "element": "H",
+      "mass": 1.008,
+      "charge": 0.33,
+      "sigma": 0.11,
+      "epsilon": 0.015
     }
   },
   "bonds": [
@@ -165,6 +172,12 @@
     { "types": ["CA", "CA"], "order": "Single", "k": 389112.0, "r0": 0.14 },
     { "types": ["CT", "CA"], "order": "Single", "k": 284512.0, "r0": 0.151 },
     { "types": ["CA", "HA"], "order": "Single", "k": 301248.0, "r0": 0.108 },
+    {
+      "types": ["N_AMINE", "H_N"],
+      "order": "Single",
+      "k": 434000.0,
+      "r0": 0.101
+    },
     {
       "types": ["N_NO2", "O_NO2"],
       "order": "Double",

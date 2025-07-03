@@ -5,7 +5,21 @@ use crate::resources::{
     ActiveWallTime, CurrentTemperature, SimulationParameters, SimulationState, StepCount,
     SystemEnergy, Thermostat, ThermostatScale,
 };
+use crate::spawning::SpawnMoleculeFromSMILESEvent;
+use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
+use bevy::ui::widget::TextUiWriter;
+
+// Add this new resource
+#[derive(Resource, Default)]
+struct SmilesInput {
+    text: String,
+    active: bool,
+}
+
+// Add this new component
+#[derive(Component)]
+struct SmilesInputField;
 
 #[derive(Component)]
 struct EnergyDisplayText;
@@ -20,16 +34,119 @@ pub struct HudPlugin;
 
 impl Plugin for HudPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_hud_ui).add_systems(
-            Update,
-            (
-                update_pause_text,
-                update_time_display,
-                update_temp_display,
-                update_energy_display,
-            )
-                .in_set(UiSet),
-        );
+        app.init_resource::<SmilesInput>()
+            .add_systems(Startup, (setup_hud_ui, setup_smiles_input_ui))
+            .add_systems(
+                Update,
+                (
+                    update_pause_text,
+                    update_time_display,
+                    update_temp_display,
+                    update_energy_display,
+                    handle_smiles_input_click,
+                    handle_smiles_keyboard,
+                    update_smiles_display,
+                )
+                    .in_set(UiSet),
+            );
+    }
+}
+
+fn setup_smiles_input_ui(mut commands: Commands) {
+    commands
+        .spawn((
+            Button,
+            SmilesInputField,
+            Node {
+                position_type: PositionType::Absolute,
+                bottom: Val::Px(10.0),
+                left: Val::Percent(50.0),
+                width: Val::Px(300.0),
+                border: UiRect::all(Val::Px(2.0)),
+                padding: UiRect::all(Val::Px(5.0)),
+                justify_content: JustifyContent::FlexStart,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            Transform::from_translation(Vec3::new(-150.0, 0.0, 0.0)),
+            BackgroundColor(Color::srgb(0.1, 0.1, 0.1)),
+            BorderColor(Color::WHITE),
+        ))
+        .with_child(Text::new("Click to type SMILES..."));
+}
+
+fn handle_smiles_input_click(
+    mut interaction_q: Query<
+        (&Interaction, &mut BorderColor),
+        (Changed<Interaction>, With<SmilesInputField>),
+    >,
+    mut input_state: ResMut<SmilesInput>,
+) {
+    if let Ok((interaction, mut border)) = interaction_q.single_mut() {
+        if *interaction == Interaction::Pressed {
+            input_state.active = true;
+            *border = Color::WHITE.into();
+        }
+    }
+}
+
+fn update_smiles_display(
+    state: Res<SmilesInput>,
+    input_field_q: Query<&Children, With<SmilesInputField>>,
+    mut text_writer: TextUiWriter,
+) {
+    if state.is_changed() {
+        if let Ok(children) = input_field_q.single() {
+            if let Some(text_entity) = children.first() {
+                *text_writer.text(*text_entity, 0) = if state.text.is_empty() && !state.active {
+                    "Click to type SMILES...".to_string()
+                } else {
+                    format!("{}{}", state.text, if state.active { "_" } else { "" })
+                };
+            }
+        }
+    }
+}
+
+fn handle_smiles_keyboard(
+    mut input_state: ResMut<SmilesInput>,
+    mut key_evr: EventReader<KeyboardInput>,
+    mut spawn_writer: EventWriter<SpawnMoleculeFromSMILESEvent>,
+    mut border_q: Query<&mut BorderColor, With<SmilesInputField>>,
+) {
+    if !input_state.active {
+        return;
+    }
+
+    for ev in key_evr.read() {
+        if !ev.state.is_pressed() {
+            continue;
+        }
+
+        match &ev.logical_key {
+            Key::Character(chars) => input_state.text.push_str(chars),
+            Key::Backspace => {
+                input_state.text.pop();
+            }
+            Key::Enter => {
+                if !input_state.text.is_empty() {
+                    info!("Sending SMILES string: {}", input_state.text);
+                    spawn_writer.write(SpawnMoleculeFromSMILESEvent(input_state.text.clone()));
+                }
+                input_state.text.clear();
+                input_state.active = false;
+                if let Ok(mut border) = border_q.single_mut() {
+                    *border = Color::WHITE.into();
+                }
+            }
+            Key::Escape => {
+                input_state.active = false;
+                if let Ok(mut border) = border_q.single_mut() {
+                    *border = Color::WHITE.into();
+                }
+            }
+            _ => {}
+        }
     }
 }
 

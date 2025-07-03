@@ -4,6 +4,7 @@ mod interaction;
 mod resources;
 mod setup;
 mod simulation;
+mod spawning;
 mod ui;
 mod visualization;
 
@@ -14,6 +15,7 @@ use interaction::InteractionPlugin;
 use resources::*;
 use setup::SetupPlugin;
 use simulation::SimulationPlugin;
+use spawning::SpawningPlugin;
 use ui::UIPlugin;
 use visualization::VisualizationPlugin;
 
@@ -91,6 +93,7 @@ fn main() {
             UIPlugin,
             VisualizationPlugin,
             InteractionPlugin,
+            SpawningPlugin,
         ))
         .run();
 }

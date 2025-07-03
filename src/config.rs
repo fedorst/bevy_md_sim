@@ -5,6 +5,7 @@ pub struct AtomSpec {
     pub id: String,
     pub type_name: String,
     pub pos: [f32; 3],
+    pub element: String,
 }
 
 #[derive(Deserialize, Debug)]
