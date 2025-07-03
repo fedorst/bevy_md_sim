@@ -1,0 +1,13 @@
+[project]
+name = "molecular-dynamics"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "rdkit-stubs>=0.8",
+    "rdkit>=2025.3.3",
+]
+[tool.pyright]
+venvPath = "."
+venv = ".venv"

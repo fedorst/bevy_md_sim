@@ -61,8 +61,10 @@ fn load_molecule_from_config(
 
     let mut id_to_entity_map = HashMap::new();
     for atom_spec in &molecule_config.atoms {
-        // let core_atom_type: AtomType = atom_spec.atom_type.into();
-        let atom_params = force_field.atom_types.get(&atom_spec.type_name).unwrap();
+        let atom_params = force_field
+            .atom_types
+            .get(&atom_spec.type_name)
+            .expect(&format!("unknown atom type: {}", atom_spec.type_name));
         let element_str = &atom_params.element;
 
         let mesh_handle = element_mesh_map

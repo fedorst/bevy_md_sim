@@ -2,7 +2,7 @@ import subprocess
 from pathlib import Path
 
 # extensions to include
-exts = {".json", ".md", ".ts", ".js", ".svelte", ".yml", ".env", ".py", ".rs", ".toml"}
+exts = {".json", ".md", ".ts", ".js", ".svelte", ".yml", ".env", ".py", ".rs", ".toml", ".py"}
 extra_files = {"Dockerfile"}
 out_path = Path("concatenated_dump.txt")
 
@@ -16,7 +16,7 @@ def get_git_included_files():
 def is_included(path):
     return (
         (path.suffix in exts or path.name in extra_files)
-        and path.name not in ["package-lock.json", "Cargo.lock", "dump_code_for_llm.py", "get_tree.sh"]
+        and path.name not in ["package-lock.json", "uv.lock", "next_up.ignore", "Cargo.lock", "dump_code_for_llm.py", "get_tree.sh"]
         and path.is_file()
     )
 

@@ -90,6 +90,20 @@
       "charge": 0.115,
       "sigma": 0.242,
       "epsilon": 0.06276
+    },
+    "N_NO2": {
+      "element": "N",
+      "mass": 14.007,
+      "charge": 0.46,
+      "sigma": 0.325,
+      "epsilon": 0.71128
+    },
+    "O_NO2": {
+      "element": "O",
+      "mass": 15.999,
+      "charge": -0.73,
+      "sigma": 0.296,
+      "epsilon": 0.87864
     }
   },
   "bonds": [
@@ -150,7 +164,25 @@
     },
     { "types": ["CA", "CA"], "order": "Single", "k": 389112.0, "r0": 0.14 },
     { "types": ["CT", "CA"], "order": "Single", "k": 284512.0, "r0": 0.151 },
-    { "types": ["CA", "HA"], "order": "Single", "k": 301248.0, "r0": 0.108 }
+    { "types": ["CA", "HA"], "order": "Single", "k": 301248.0, "r0": 0.108 },
+    {
+      "types": ["N_NO2", "O_NO2"],
+      "order": "Double",
+      "k": 600000.0,
+      "r0": 0.125
+    },
+    {
+      "types": ["N_NO2", "O_NO2"],
+      "order": "Single",
+      "k": 200000.0,
+      "r0": 0.125
+    },
+    {
+      "types": ["CA", "N_NO2"],
+      "order": "Single",
+      "k": 300000.0,
+      "r0": 0.145
+    }
   ],
   "angles": [
     { "types": ["H_C", "CT", "H_C"], "k": 276.144, "theta0_deg": 107.8 },
@@ -171,7 +203,17 @@
     { "types": ["H_O", "N_GUA", "H_O"], "k": 292.88, "theta0_deg": 120.0 },
     { "types": ["CA", "CA", "CA"], "k": 359.824, "theta0_deg": 120.0 },
     { "types": ["CT", "CA", "CA"], "k": 334.72, "theta0_deg": 120.0 },
-    { "types": ["CA", "CA", "HA"], "k": 292.88, "theta0_deg": 120.0 }
+    { "types": ["CA", "CA", "HA"], "k": 292.88, "theta0_deg": 120.0 },
+    {
+      "types": ["CA", "N_NO2", "O_NO2"],
+      "k": 400.0,
+      "theta0_deg": 120.0
+    },
+    {
+      "types": ["N_NO2", "O_NO2", "O_NO2"],
+      "k": 350.0,
+      "theta0_deg": 120.0
+    }
   ],
   "dihedrals": [
     {
