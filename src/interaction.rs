@@ -17,11 +17,15 @@ use std::collections::HashMap;
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct InteractionSet;
 
+#[derive(Event, Debug)]
+pub struct RebuildConnectivityEvent;
+
 pub struct InteractionPlugin;
 
 impl Plugin for InteractionPlugin {
     fn build(&self, app: &mut App) {
         app.configure_sets(Update, VisualizationSet.after(InteractionSet))
+            .add_event::<RebuildConnectivityEvent>()
             .add_plugins(MeshPickingPlugin)
             .init_resource::<SelectionState>()
             .add_observer(handle_selection)
@@ -31,6 +35,7 @@ impl Plugin for InteractionPlugin {
                     (manage_bonds, delete_selected_atom),
                     ApplyDeferred,
                     (
+                        rebuild_on_event,
                         update_highlights,
                         draw_selection_gizmos,
                         focus_camera_on_selection,
@@ -45,30 +50,25 @@ impl Plugin for InteractionPlugin {
 fn manage_bonds(
     keys: Res<ButtonInput<KeyCode>>,
     selection: Res<SelectionState>,
-    mut commands: Commands,
     mut connectivity: ResMut<SystemConnectivity>,
     force_field: Res<ForceField>,
     atom_query: Query<&Atom>,
-    mut bond_vis_query: Query<(Entity, &BondVisualization)>,
-    shared_handles: Res<SharedAssetHandles>,
+    // It now takes an EventWriter to signal that a rebuild is needed.
+    mut rebuild_writer: EventWriter<RebuildConnectivityEvent>,
 ) {
-    // Only act if 'B' is pressed and exactly two atoms are selected
     if keys.just_pressed(KeyCode::KeyB) && selection.selected.len() == 2 {
         let e1 = selection.selected[0];
         let e2 = selection.selected[1];
 
-        // Find if a bond already exists between the two selected atoms
         let bond_index = connectivity
             .bonds
             .iter()
             .position(|b| (b.a == e1 && b.b == e2) || (b.a == e2 && b.b == e1));
 
         if let Some(index) = bond_index {
-            // --- BOND DELETION ---
             info!("Deleting bond between {:?} and {:?}", e1, e2);
             connectivity.bonds.remove(index);
         } else {
-            // --- BOND CREATION ---
             let Ok(type1) = atom_query.get(e1) else {
                 return;
             };
@@ -76,7 +76,6 @@ fn manage_bonds(
                 return;
             };
 
-            // Check if parameters exist for this bond type
             if force_field.bond_params.contains_key(&(
                 type1.type_name.clone(),
                 type2.type_name.clone(),
@@ -93,26 +92,29 @@ fn manage_bonds(
                     "Cannot create bond: No parameters found for bond type {:?}-{:?}",
                     type1.type_name, type2.type_name
                 );
-                // Abort without rebuilding if params are missing
                 return;
             }
         }
 
-        rebuild_connectivity_and_visuals(
-            &mut commands,
-            &mut connectivity,
-            &mut bond_vis_query,
-            &shared_handles,
-        );
+        // Instead of calling a function, just send an event.
+        rebuild_writer.write(RebuildConnectivityEvent);
     }
 }
 
-fn rebuild_connectivity_and_visuals(
-    commands: &mut Commands,
-    connectivity: &mut ResMut<SystemConnectivity>,
-    bond_vis_query: &mut Query<(Entity, &BondVisualization)>,
-    shared_handles: &Res<SharedAssetHandles>,
+fn rebuild_on_event(
+    mut rebuild_reader: EventReader<RebuildConnectivityEvent>,
+    mut commands: Commands,
+    mut connectivity: ResMut<SystemConnectivity>,
+    bond_vis_query: Query<(Entity, &BondVisualization)>,
+    shared_handles: Res<SharedAssetHandles>,
 ) {
+    // Only run if the event was actually sent. This is an efficient way to check.
+    if rebuild_reader.is_empty() {
+        return;
+    }
+    // Important: Consume the events to prevent this from running again next frame.
+    rebuild_reader.clear();
+
     info!("Rebuilding angles and bond visuals...");
 
     // 1. Despawn all existing bond visuals to ensure a clean slate
@@ -207,14 +209,13 @@ fn handle_selection(
         }
     }
 }
-
 fn delete_selected_atom(
     mut commands: Commands,
     keys: Res<ButtonInput<KeyCode>>,
     mut selection: ResMut<SelectionState>,
     mut connectivity: ResMut<SystemConnectivity>,
-    mut bond_vis_query: Query<(Entity, &BondVisualization)>,
-    shared_handles: Res<SharedAssetHandles>, // Needs access to this now
+    // It also takes an EventWriter.
+    mut rebuild_writer: EventWriter<RebuildConnectivityEvent>,
 ) {
     if keys.just_pressed(KeyCode::Delete) {
         let entities_to_delete = selection.selected.clone();
@@ -224,21 +225,22 @@ fn delete_selected_atom(
                 entities_to_delete
             );
 
+            let mut connectivity_changed = false;
             for entity_to_delete in &entities_to_delete {
                 commands.entity(*entity_to_delete).despawn();
-                // Remove any bonds connected to this atom
+                let initial_bond_count = connectivity.bonds.len();
                 connectivity
                     .bonds
                     .retain(|bond| bond.a != *entity_to_delete && bond.b != *entity_to_delete);
+                if connectivity.bonds.len() != initial_bond_count {
+                    connectivity_changed = true;
+                }
             }
 
-            // After all deletions are done, do one single rebuild
-            rebuild_connectivity_and_visuals(
-                &mut commands,
-                &mut connectivity,
-                &mut bond_vis_query,
-                &shared_handles,
-            );
+            // Only trigger a rebuild if a bond was actually removed.
+            if connectivity_changed {
+                rebuild_writer.write(RebuildConnectivityEvent);
+            }
 
             selection.selected.clear();
             info!("Cleared selection after deletion.");
