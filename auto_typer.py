@@ -36,6 +36,7 @@ TYPE_RULES = [
     ("CA", "[c]"),
 
     # Generic Amines/Hydroxyls
+    ("N_AMINE", "[N;H3;D3]"),     # Explicitly matches NH3
     ("N_AMINE", "[N;H2;D3]"),
     ("O_H", "[O;H2;D2]"),
     ("O_H", "[O;H1;D2]"),

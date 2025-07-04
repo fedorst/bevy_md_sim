@@ -299,6 +299,8 @@
     { "types": ["O_COO", "C_CO", "CT"], "k": 669.44, "theta0_deg": 117.0 },
     { "types": ["CT", "N_AMINE", "H_O"], "k": 292.88, "theta0_deg": 109.5 },
     { "types": ["H_O", "N_AMINE", "H_O"], "k": 292.88, "theta0_deg": 107.0 },
+    { "types": ["H_N", "N_AMINE", "H_N"], "k": 292.88, "theta0_deg": 107.0 },
+    { "types": ["CT", "N_AMINE", "H_N"], "k": 334.72, "theta0_deg": 109.5 },
     { "types": ["H_C", "CT", "N_AMINE"], "k": 292.88, "theta0_deg": 110.7 },
     { "types": ["CT", "CT", "N_GUA"], "k": 418.4, "theta0_deg": 112.0 },
     { "types": ["CT", "N_GUA", "C_GUA"], "k": 418.4, "theta0_deg": 125.0 },

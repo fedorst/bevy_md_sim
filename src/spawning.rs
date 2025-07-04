@@ -8,11 +8,19 @@ use crate::resources::{
     SystemConnectivity,
 };
 use bevy::prelude::*;
+use bevy::tasks::{AsyncComputeTaskPool, Task};
+use futures_lite::future;
 use std::collections::{HashMap, HashSet};
 
 /// An event sent to request a new molecule from a SMILES string.
 #[derive(Event, Debug)]
 pub struct SpawnMoleculeFromSMILESEvent(pub String);
+
+#[derive(Event, Debug)]
+pub struct ValidateSMILESEvent(pub String);
+/// Event sent by the async task with the validation result.
+#[derive(Event, Debug)]
+pub struct SMILESValidationResult(pub Result<(), String>);
 
 /// An event sent when the python script succeeds, containing the molecule JSON.
 #[derive(Event, Debug)]
@@ -22,17 +30,23 @@ struct SpawnMoleculeFromJsonEvent(String);
 #[derive(Component)]
 pub struct MoleculeContainer;
 
+#[derive(Component)]
+struct ValidationTask(Option<Task<SMILESValidationResult>>);
+
 pub struct SpawningPlugin;
 
 impl Plugin for SpawningPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<SpawnMoleculeFromSMILESEvent>()
+            .add_event::<ValidateSMILESEvent>()
+            .add_event::<SMILESValidationResult>()
             .add_event::<SpawnMoleculeFromJsonEvent>()
             .add_systems(
                 Update,
                 (
-                    trigger_molecule_generation,
-                    // This chain runs ONLY when a SpawnMoleculeFromJsonEvent is sent.
+                    trigger_smiles_validation,
+                    handle_validation_result,
+                    trigger_molecule_generation_on_enter,
                     (
                         despawn_previous_molecule,
                         ApplyDeferred,
@@ -46,15 +60,85 @@ impl Plugin for SpawningPlugin {
     }
 }
 
+fn trigger_smiles_validation(
+    mut commands: Commands,
+    mut validation_events: EventReader<ValidateSMILESEvent>,
+    mut existing_task_query: Query<(Entity, &mut ValidationTask)>,
+) {
+    // Read the last event for this frame, if any.
+    if let Some(event) = validation_events.read().last() {
+        info!("[Validation] Triggered for SMILES: '{}'", event.0);
+        let smiles = event.0.clone();
+
+        // If a validation task is already running, cancel it.
+        for (entity, mut task_component) in &mut existing_task_query {
+            info!("[Validation] Cancelling previous validation task.");
+            // Detaching the task handle prevents the result from being sent.
+            if let Some(old_task) = Option::take(&mut task_component.0) {
+                // `old_task` is now owned by this scope. When the scope ends,
+                // `old_task` is dropped, which signals bevy_tasks to cancel it.
+                // We don't need to call any method on it.
+            }
+            commands.entity(entity).despawn();
+            // commands.entity(entity).remove::<ValidationTask>();
+        }
+
+        // Use Bevy's async task pool to run the script in a background thread.
+        let thread_pool = AsyncComputeTaskPool::get();
+        let task = thread_pool.spawn(async move {
+            if smiles.is_empty() {
+                return SMILESValidationResult(Err("SMILES string is empty.".to_string()));
+            }
+            let output = std::process::Command::new("python")
+                .arg("auto_typer.py")
+                .arg("--smiles")
+                .arg(&smiles)
+                .output();
+
+            info!("[Validation Task] Python script finished for '{}'.", smiles);
+
+            match output {
+                Ok(output) if output.status.success() => SMILESValidationResult(Ok(())),
+                Ok(output) => {
+                    let err_str = String::from_utf8_lossy(&output.stderr).to_string();
+                    SMILESValidationResult(Err(err_str))
+                }
+                Err(e) => SMILESValidationResult(Err(e.to_string())),
+            }
+        });
+
+        // Spawn a new entity to hold the task.
+        commands.spawn(ValidationTask(Some(task)));
+    }
+}
+
+fn handle_validation_result(
+    mut commands: Commands,
+    mut tasks: Query<(Entity, &mut ValidationTask)>,
+    mut result_writer: EventWriter<SMILESValidationResult>,
+) {
+    for (entity, mut task_component) in &mut tasks {
+        if let Some(task) = task_component.0.as_mut() {
+            if let Some(result) = future::block_on(future::poll_once(task)) {
+                info!(
+                    "[Validation] Task complete. Sending result event: {:?}",
+                    result
+                );
+                result_writer.write(result);
+                commands.entity(entity).despawn();
+            }
+        }
+    }
+}
+
 // System 1: Listens for external requests and runs the Python script.
-fn trigger_molecule_generation(
-    mut events: EventReader<SpawnMoleculeFromSMILESEvent>,
+fn trigger_molecule_generation_on_enter(
+    mut spawn_events: EventReader<SpawnMoleculeFromSMILESEvent>,
     mut writer: EventWriter<SpawnMoleculeFromJsonEvent>,
 ) {
-    for event in events.read() {
+    for event in spawn_events.read() {
         let smiles = &event.0;
         info!("Received request to spawn molecule from SMILES: {}", smiles);
-
         let output = match std::process::Command::new("python")
             .arg("auto_typer.py")
             .arg("--smiles")
@@ -63,20 +147,19 @@ fn trigger_molecule_generation(
         {
             Ok(out) => out,
             Err(e) => {
-                error!(
-                    "Failed to execute python script. Is 'python' installed and in your PATH? Error: {}",
-                    e
-                );
+                error!("Failed to execute python script: {}", e);
                 continue;
             }
         };
-
         if output.status.success() {
-            let json_str = String::from_utf8_lossy(&output.stdout).to_string();
-            writer.write(SpawnMoleculeFromJsonEvent(json_str));
+            writer.write(SpawnMoleculeFromJsonEvent(
+                String::from_utf8_lossy(&output.stdout).to_string(),
+            ));
         } else {
-            let err_str = String::from_utf8_lossy(&output.stderr);
-            error!("Molecule generation script failed: {}", err_str);
+            error!(
+                "Molecule generation script failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
         }
     }
 }

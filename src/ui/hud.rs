@@ -5,7 +5,7 @@ use crate::resources::{
     ActiveWallTime, CurrentTemperature, SimulationParameters, SimulationState, StepCount,
     SystemEnergy, Thermostat, ThermostatScale,
 };
-use crate::spawning::SpawnMoleculeFromSMILESEvent;
+use crate::spawning::{SMILESValidationResult, SpawnMoleculeFromSMILESEvent, ValidateSMILESEvent};
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
 use bevy::ui::widget::TextUiWriter;
@@ -46,6 +46,7 @@ impl Plugin for HudPlugin {
                     handle_smiles_input_click,
                     handle_smiles_keyboard,
                     update_smiles_display,
+                    handle_validation_ui,
                 )
                     .in_set(UiSet),
             );
@@ -108,45 +109,81 @@ fn update_smiles_display(
     }
 }
 
+fn handle_validation_ui(
+    mut validation_results: EventReader<SMILESValidationResult>,
+    mut border_q: Query<&mut BorderColor, With<SmilesInputField>>,
+    input_state: Res<SmilesInput>,
+) {
+    if let Ok(mut border) = border_q.single_mut() {
+        if let Some(event) = validation_results.read().last() {
+            info!("[UI] Received validation result: {:?}", event.0);
+            if input_state.active {
+                match &event.0 {
+                    Ok(_) => *border = Color::WHITE.into(),
+                    Err(e) if !e.trim().is_empty() => {
+                        *border = Color::linear_rgba(0.8, 0.1, 0.1, 1.0).into()
+                    }
+                    Err(_) => *border = Color::linear_rgba(0.8, 0.1, 0.1, 1.0).into(),
+                }
+            }
+        }
+
+        if input_state.is_changed() && !input_state.active {
+            *border = Color::WHITE.into();
+        }
+    }
+}
+
 fn handle_smiles_keyboard(
     mut input_state: ResMut<SmilesInput>,
     mut key_evr: EventReader<KeyboardInput>,
+    // --- CHANGE these writers ---
     mut spawn_writer: EventWriter<SpawnMoleculeFromSMILESEvent>,
-    mut border_q: Query<&mut BorderColor, With<SmilesInputField>>,
+    mut validate_writer: EventWriter<ValidateSMILESEvent>,
 ) {
     if !input_state.active {
         return;
     }
 
+    let mut string_changed = false;
     for ev in key_evr.read() {
         if !ev.state.is_pressed() {
             continue;
         }
 
         match &ev.logical_key {
-            Key::Character(chars) => input_state.text.push_str(chars),
+            Key::Character(chars) => {
+                input_state.text.push_str(chars);
+                string_changed = true;
+            }
             Key::Backspace => {
                 input_state.text.pop();
+                string_changed = true;
             }
             Key::Enter => {
                 if !input_state.text.is_empty() {
-                    info!("Sending SMILES string: {}", input_state.text);
+                    // On Enter, send the final spawn event
                     spawn_writer.write(SpawnMoleculeFromSMILESEvent(input_state.text.clone()));
                 }
                 input_state.text.clear();
                 input_state.active = false;
-                if let Ok(mut border) = border_q.single_mut() {
-                    *border = Color::WHITE.into();
-                }
+                string_changed = true; // To reset color
             }
             Key::Escape => {
                 input_state.active = false;
-                if let Ok(mut border) = border_q.single_mut() {
-                    *border = Color::WHITE.into();
-                }
+                string_changed = true; // To reset color
             }
             _ => {}
         }
+    }
+
+    // If the string changed, send a validation event.
+    if string_changed && input_state.active {
+        info!(
+            "[UI] String changed. Sending validation event for: '{}'",
+            input_state.text
+        );
+        validate_writer.write(ValidateSMILESEvent(input_state.text.clone()));
     }
 }
 
