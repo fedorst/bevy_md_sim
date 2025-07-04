@@ -4,7 +4,7 @@ use crate::components::*;
 use crate::config::MoleculeConfig;
 use crate::interaction::RebuildConnectivityEvent;
 use crate::resources::{
-    Angle, AtomIdMap, Bond, BondOrder, Dihedral, ExcludedPairs, SharedAssetHandles,
+    Angle, AtomIdMap, Bond, BondOrder, Dihedral, ExcludedPairs, ForceField, SharedAssetHandles,
     SystemConnectivity,
 };
 use bevy::prelude::*;
@@ -109,6 +109,8 @@ fn spawn_new_molecule(
     mut connectivity: ResMut<SystemConnectivity>,
     mut atom_id_map: ResMut<AtomIdMap>,
     shared_handles: Res<SharedAssetHandles>,
+    force_field: Res<ForceField>,
+    atom_query: Query<&Atom>,
 ) {
     for event in events.read() {
         let config: MoleculeConfig = match serde_json::from_str(&event.0) {
@@ -174,37 +176,46 @@ fn spawn_new_molecule(
         });
 
         for bond_spec in &config.bonds {
-            let entity1 = id_to_entity_map[&bond_spec[0]];
-            let entity2 = id_to_entity_map[&bond_spec[1]];
+            let entity1 = id_to_entity_map[&bond_spec.atoms[0]];
+            let entity2 = id_to_entity_map[&bond_spec.atoms[1]];
+            let order = match bond_spec.order.as_str() {
+                "Double" => BondOrder::Double,
+                "Triple" => BondOrder::Triple, // You need to add this to the BondOrder enum
+                _ => BondOrder::Single,
+            };
             connectivity.bonds.push(Bond {
                 a: entity1,
                 b: entity2,
-                order: BondOrder::Single,
+                order,
             });
-        }
-        if let Some(double_bonds) = &config.double_bonds {
-            for bond_spec in double_bonds {
-                let entity1 = id_to_entity_map[&bond_spec[0]];
-                let entity2 = id_to_entity_map[&bond_spec[1]];
-                connectivity.bonds.push(Bond {
-                    a: entity1,
-                    b: entity2,
-                    order: BondOrder::Double,
-                });
-            }
         }
 
         // Spawn bond visuals
         for bond in &connectivity.bonds {
+            let Ok([atom1, atom2]) = atom_query.get_many([bond.a, bond.b]) else {
+                continue;
+            };
+            let key = (atom1.type_name.clone(), atom2.type_name.clone(), bond.order);
+
+            let material_handle = if force_field.bond_params.contains_key(&key) {
+                shared_handles.bond_material.clone()
+            } else {
+                warn!(
+                    "Found undefined bond between types: {} and {}",
+                    atom1.type_name, atom2.type_name
+                );
+                shared_handles.undefined_bond_material.clone()
+            };
             let num_strands = match bond.order {
                 BondOrder::Single => 1,
                 BondOrder::Double => 2,
+                BondOrder::Triple => 3,
             };
             for i in 0..num_strands {
-                // Bond visuals do not need to be children of the molecule container.
                 commands.spawn((
                     Mesh3d(shared_handles.bond_mesh.clone()),
-                    MeshMaterial3d(shared_handles.bond_material.clone()),
+                    // Use the material we just selected
+                    MeshMaterial3d(material_handle.clone()),
                     Transform::default(),
                     GlobalTransform::default(),
                     BondVisualization {

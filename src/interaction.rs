@@ -107,6 +107,8 @@ fn rebuild_on_event(
     mut connectivity: ResMut<SystemConnectivity>,
     bond_vis_query: Query<(Entity, &BondVisualization)>,
     shared_handles: Res<SharedAssetHandles>,
+    force_field: Res<ForceField>,
+    atom_query: Query<&Atom>,
 ) {
     // Only run if the event was actually sent. This is an efficient way to check.
     if rebuild_reader.is_empty() {
@@ -132,16 +134,33 @@ fn rebuild_on_event(
         adjacency.entry(bond.a).or_default().push(bond.b);
         adjacency.entry(bond.b).or_default().push(bond.a);
 
-        // Spawn the new visual for this bond
+        // Check if this bond is defined in the force field
+        let Ok([atom1, atom2]) = atom_query.get_many([bond.a, bond.b]) else {
+            continue;
+        };
+        let key = (atom1.type_name.clone(), atom2.type_name.clone(), bond.order);
+
+        let material_handle = if force_field.bond_params.contains_key(&key) {
+            shared_handles.bond_material.clone()
+        } else {
+            warn!(
+                "Found undefined bond between types: {} and {}",
+                atom1.type_name, atom2.type_name
+            );
+            shared_handles.undefined_bond_material.clone()
+        };
+
         let num_strands = match bond.order {
             BondOrder::Single => 1,
             BondOrder::Double => 2,
+            BondOrder::Triple => 3,
         };
         for i in 0..num_strands {
             commands.spawn((
                 Mesh3d(shared_handles.bond_mesh.clone()),
-                MeshMaterial3d(shared_handles.bond_material.clone()),
+                MeshMaterial3d(material_handle.clone()),
                 Transform::default(),
+                GlobalTransform::default(),
                 BondVisualization {
                     atom1: bond.a,
                     atom2: bond.b,

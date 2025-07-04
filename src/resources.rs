@@ -20,6 +20,7 @@ pub struct Angle {
 pub enum BondOrder {
     Single,
     Double,
+    Triple,
 }
 
 // resources
@@ -67,6 +68,7 @@ pub struct ForceMultiplier(pub f32);
 pub struct SharedAssetHandles {
     pub bond_mesh: Handle<Mesh>,
     pub bond_material: Handle<StandardMaterial>,
+    pub undefined_bond_material: Handle<StandardMaterial>,
 }
 
 #[derive(Resource, Default, Deref, DerefMut)]
@@ -151,10 +153,10 @@ impl ForceField {
             serde_json::from_str(&file_contents).expect("Failed to parse force field JSON");
         let mut bond_params = HashMap::new();
         for p in ff_file.bonds {
-            let order = if p.order == "Double" {
-                BondOrder::Double
-            } else {
-                BondOrder::Single
+            let order = match p.order.as_str() {
+                "Double" => BondOrder::Double,
+                "Triple" => BondOrder::Triple,
+                _ => BondOrder::Single,
             };
             bond_params.insert((p.types[0].clone(), p.types[1].clone(), order), (p.k, p.r0));
             bond_params.insert((p.types[1].clone(), p.types[0].clone(), order), (p.k, p.r0));

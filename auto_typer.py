@@ -1,4 +1,4 @@
-# auto_typer.py (Version 10.1 - Fixed Guanidinium Detection)
+# auto_typer.py (Version 12.0 - Final Amide/Ester/Acid Fix)
 import json
 import argparse
 import sys
@@ -6,6 +6,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 # --- FINALIZED RULES ---
+# This order is definitive.
 TYPE_RULES = [
     # CHARGED SPECIES (Highest Precedence)
     ("N_PLUS", "[N+1]"),
@@ -17,47 +18,50 @@ TYPE_RULES = [
     ("H_O", "[H](~O)"),
     ("H_C", "[H](~C)"),
 
-    # SPECIFIC NEUTRAL HEAVY ATOMS
-    ("CA", "[c]"),
+    # SPECIAL HYBRIDIZATIONS
+    ("C_NITRILE", "[C;D2]#[N;D1]"),
+    ("N_NITRILE", "[N;D1]#[C;D2]"),
+
+    #Carboxylic Acid Oxygen (must be before generic hydroxyls)
+    ("O_ACID", "[O;H1;D2](C(=O))"),
+
+    # SPECIFIC NEUTRAL HEAVY ATOMS - ORDER IS CRITICAL
+    # Amide Nitrogen (must be before generic amines)
+    ("N_AMIDE", "[N;D3](C(=O))"),
+    # Ether/Ester Oxygen (must be before generic hydroxyls)
+    ("O_ETHER", "[O;D2](C)C"),
+    # Carbonyl Carbon
     ("C_CO", "[C;D3](=[O;D1])"),
+    # Aromatic Carbon
+    ("CA", "[c]"),
+
+    # Generic Amines/Hydroxyls
     ("N_AMINE", "[N;H2;D3]"),
     ("O_H", "[O;H2;D2]"),
     ("O_H", "[O;H1;D2]"),
     ("O_CO", "[O;D1]=[C]"),
 
-    # GENERAL FALLBACKS
+    # GENERAL FALLBACKS (Lowest Precedence)
     ("CT", "[C;X4;!c]"),
     ("N_AMINE", "[N;X3;!N+]"),
 ]
 
-def assign_special_groups(mol, assigned_types, smiles_string):
+def assign_special_groups(mol, assigned_types):
     """
-    A dedicated function to handle complex functional groups that are poorly
-    described by SMARTS. This runs before the main loop.
+    A dedicated function to handle complex functional groups procedurally.
     """
-    # --- Fixed Guanidinium Detection ---
-    # Pattern for guanidinium: C with imine (C=N) + 2 amines, common in arginine
-    guanidinium_pat = Chem.MolFromSmarts("[C](=[N])([N])[N]")
-    if guanidinium_pat:
-        matches = mol.GetSubstructMatches(guanidinium_pat)
-        for match in matches:
-            c_idx, n1_idx, n2_idx, n3_idx = match
-            print(f"  [Fix] Found Guanidinium group: C={c_idx}, Ns=[{n1_idx},{n2_idx},{n3_idx}]")
-            assigned_types[c_idx] = "C_GUA"
-            assigned_types[n1_idx] = "N_GUA"
-            assigned_types[n2_idx] = "N_GUA"
-            assigned_types[n3_idx] = "N_GUA"
-
-    # Fallback: any carbon with exactly 3 nitrogen neighbors
-    if not guanidinium_pat or not mol.GetSubstructMatches(guanidinium_pat):
-        for i, atom in enumerate(mol.GetAtoms()):
-            if atom.GetSymbol() == 'C' and i not in assigned_types:
-                n_neighbors = [n for n in atom.GetNeighbors() if n.GetSymbol() == 'N']
-                if len(n_neighbors) == 3:
-                    print(f"  [Fix] Found Guanidinium by neighbor count: C={i}, Ns={[n.GetIdx() for n in n_neighbors]}")
-                    assigned_types[i] = "C_GUA"
-                    for n in n_neighbors:
-                        assigned_types[n.GetIdx()] = "N_GUA"
+    # --- Guanidinium Group in Arginine ---
+    # The procedural check for a carbon bonded to 3 nitrogens is the most robust.
+    for atom in mol.GetAtoms():
+        if atom.GetSymbol() == 'C' and atom.GetIdx() not in assigned_types:
+            neighbors = atom.GetNeighbors()
+            n_neighbors = [n for n in neighbors if n.GetSymbol() == 'N']
+            if len(n_neighbors) == 3:
+                c_idx = atom.GetIdx()
+                assigned_types[c_idx] = "C_GUA"
+                for n_atom in n_neighbors:
+                    assigned_types[n_atom.GetIdx()] = "N_GUA"
+                break # Assume only one guanidinium group
 
     # --- Nitro Group ---
     nitro_pat = Chem.MolFromSmarts("[N+](=O)[O-]")
@@ -74,8 +78,7 @@ def fix_carboxylate_resonance(mol, assigned_types):
         o_atom = mol.GetAtomWithIdx(o_coo_idx)
         for neighbor in o_atom.GetNeighbors():
             if neighbor.GetSymbol() == 'C':
-                c_atom = neighbor
-                for c_neighbor in c_atom.GetNeighbors():
+                for c_neighbor in neighbor.GetNeighbors():
                     if c_neighbor.GetSymbol() == 'O' and c_neighbor.GetIdx() != o_coo_idx:
                         if assigned_types.get(c_neighbor.GetIdx()) == 'O_CO':
                             assigned_types[c_neighbor.GetIdx()] = 'O_COO'
@@ -99,44 +102,38 @@ def build_molecule_from_smiles(smiles_string, name):
 
     assigned_types = {}
 
-    # PASS 1: Handle complex, multi-atom functional groups first.
-    assign_special_groups(mol, assigned_types, smiles_string)
+    assign_special_groups(mol, assigned_types)
 
-    # PASS 2: Main rule-based assignment loop.
     for type_name, smarts in TYPE_RULES:
         pattern = Chem.MolFromSmarts(smarts)
         if not pattern: continue
         matches = mol.GetSubstructMatches(pattern)
         for match_tuple in matches:
-            if not match_tuple: continue
-            # Fixed: Handle single atom patterns correctly
-            for idx in match_tuple:
-                if idx not in assigned_types:
-                    assigned_types[idx] = type_name
-                    break  # Only assign to first unassigned atom in match
+            # This loop now correctly handles single-atom patterns.
+            idx = match_tuple[0]
+            if idx not in assigned_types:
+                assigned_types[idx] = type_name
 
-    # PASS 3: Post-processing fixes for resonance effects.
     fix_carboxylate_resonance(mol, assigned_types)
 
-    # Final assignment to the JSON data.
     for i, atom_spec in enumerate(atoms_data):
         if i in assigned_types:
             atom_spec['type_name'] = assigned_types[i]
         else:
-            # We add a print here to be notified of any future gaps in our rules.
-            print(f"Warning: No rule matched atom {atom_spec['id']}. Check rules.", file=sys.stderr)
+            print(f"Warning: No rule matched atom {atom_spec['id']}. Using element fallback.", file=sys.stderr)
             atom_spec['type_name'] = atom_spec['element']
 
-    bonds_data, double_bonds_data = [], []
+    bonds_list = []
     for bond in mol.GetBonds():
         a1_id = f"{mol.GetAtomWithIdx(bond.GetBeginAtomIdx()).GetSymbol()}{bond.GetBeginAtomIdx() + 1}"
         a2_id = f"{mol.GetAtomWithIdx(bond.GetEndAtomIdx()).GetSymbol()}{bond.GetEndAtomIdx() + 1}"
-        if bond.GetBondType() == Chem.BondType.DOUBLE:
-            double_bonds_data.append([a1_id, a2_id])
-        else:
-            bonds_data.append([a1_id, a2_id])
+        bond_type = bond.GetBondType()
+        order_str = "Single"
+        if bond_type == Chem.BondType.DOUBLE: order_str = "Double"
+        elif bond_type == Chem.BondType.TRIPLE: order_str = "Triple"
+        bonds_list.append({"atoms": [a1_id, a2_id], "order": order_str})
 
-    return {"name": name, "atoms": atoms_data, "bonds": bonds_data, "double_bonds": double_bonds_data}
+    return {"name": name, "atoms": atoms_data, "bonds": bonds_list}
 
 def main():
     parser = argparse.ArgumentParser(description="Generate a typed molecule JSON from a SMILES string.")

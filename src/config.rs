@@ -9,10 +9,14 @@ pub struct AtomSpec {
 }
 
 #[derive(Deserialize, Debug)]
+pub struct BondSpec {
+    pub atoms: [String; 2],
+    pub order: String,
+}
+
+#[derive(Deserialize, Debug)]
 pub struct MoleculeConfig {
     pub name: String,
     pub atoms: Vec<AtomSpec>,
-    pub bonds: Vec<[String; 2]>,
-    #[serde(default)]
-    pub double_bonds: Option<Vec<[String; 2]>>,
+    pub bonds: Vec<BondSpec>,
 }

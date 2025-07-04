@@ -133,6 +133,7 @@ fn display_bond_info(
                 let bond_type_str = match bond.order {
                     BondOrder::Single => "Single Bond",
                     BondOrder::Double => "Double Bond",
+                    BondOrder::Triple => "Triple Bond",
                 };
                 return Some(format!(
                     "Selected {}-{}\n\

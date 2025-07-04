@@ -111,6 +111,41 @@
       "charge": 0.33,
       "sigma": 0.11,
       "epsilon": 0.015
+    },
+    "O_ETHER": {
+      "element": "O",
+      "mass": 15.999,
+      "charge": -0.3,
+      "sigma": 0.312,
+      "epsilon": 0.71128
+    },
+    "N_AMIDE": {
+      "element": "N",
+      "mass": 14.007,
+      "charge": -0.5,
+      "sigma": 0.325,
+      "epsilon": 0.71128
+    },
+    "C_NITRILE": {
+      "element": "C",
+      "mass": 12.011,
+      "charge": 0.1,
+      "sigma": 0.35,
+      "epsilon": 0.27614
+    },
+    "N_NITRILE": {
+      "element": "N",
+      "mass": 14.007,
+      "charge": -0.4,
+      "sigma": 0.325,
+      "epsilon": 0.71128
+    },
+    "O_ACID": {
+      "element": "O",
+      "mass": 15.999,
+      "charge": -0.55,
+      "sigma": 0.307,
+      "epsilon": 0.71128
     }
   },
   "bonds": [
@@ -195,6 +230,62 @@
       "order": "Single",
       "k": 300000.0,
       "r0": 0.145
+    },
+    {
+      "types": ["CT", "O_ETHER"],
+      "order": "Single",
+      "k": 267776.0,
+      "r0": 0.141
+    },
+    {
+      "types": ["C_CO", "O_ETHER"],
+      "order": "Single",
+      "k": 334720.0,
+      "r0": 0.136
+    },
+    { "types": ["CT", "CA"], "order": "Single", "k": 284512.0, "r0": 0.151 },
+    { "types": ["CA", "O_H"], "order": "Single", "k": 334720.0, "r0": 0.136 },
+    {
+      "types": ["CA", "N_AMINE"],
+      "order": "Single",
+      "k": 334720.0,
+      "r0": 0.138
+    },
+    {
+      "types": ["C_CO", "N_AMIDE"],
+      "order": "Single",
+      "k": 418400.0,
+      "r0": 0.1335
+    },
+    {
+      "types": ["CT", "C_NITRILE"],
+      "order": "Single",
+      "k": 284512.0,
+      "r0": 0.147
+    },
+    {
+      "types": ["C_NITRILE", "N_NITRILE"],
+      "order": "Triple",
+      "k": 836800.0,
+      "r0": 0.115
+    },
+    {
+      "types": ["C_CO", "O_ACID"],
+      "order": "Single",
+      "k": 418400.0,
+      "r0": 0.135
+    },
+    {
+      "types": ["N_AMIDE", "H_N"],
+      "order": "Single",
+      "k": 389112.0,
+      "r0": 0.101
+    },
+    {
+      "types": ["O_ACID", "H_O"],
+      "order": "Single",
+      "k": 462750.4,
+      "r0": 0.096
     }
   ],
   "angles": [
@@ -226,7 +317,31 @@
       "types": ["N_NO2", "O_NO2", "O_NO2"],
       "k": 350.0,
       "theta0_deg": 120.0
-    }
+    },
+    { "types": ["CT", "O_ETHER", "CT"], "k": 418.4, "theta0_deg": 112.0 },
+    { "types": ["C_CO", "O_ETHER", "CT"], "k": 502.0, "theta0_deg": 115.0 },
+    { "types": ["CT", "C_CO", "O_ETHER"], "k": 418.4, "theta0_deg": 111.0 },
+    { "types": ["O_CO", "C_CO", "O_ETHER"], "k": 669.4, "theta0_deg": 125.0 },
+    { "types": ["CT", "C_CO", "CT"], "k": 334.7, "theta0_deg": 116.0 },
+    { "types": ["CT", "C_CO", "O_H"], "k": 418.4, "theta0_deg": 110.0 },
+    { "types": ["O_CO", "C_CO", "O_H"], "k": 669.4, "theta0_deg": 125.0 },
+    { "types": ["C_CO", "O_H", "H_O"], "k": 460.2, "theta0_deg": 108.5 },
+    { "types": ["CA", "CA", "CT"], "k": 334.7, "theta0_deg": 120.0 },
+    { "types": ["HA", "CA", "CT"], "k": 292.8, "theta0_deg": 120.0 },
+    { "types": ["CA", "CA", "O_H"], "k": 334.7, "theta0_deg": 120.0 },
+    { "types": ["CA", "O_H", "H_O"], "k": 460.2, "theta0_deg": 109.5 },
+    { "types": ["CA", "CA", "N_AMINE"], "k": 334.7, "theta0_deg": 120.0 },
+    { "types": ["CA", "N_AMINE", "H_N"], "k": 292.8, "theta0_deg": 118.0 },
+    { "types": ["C_CO", "N_AMIDE", "H_N"], "k": 334.7, "theta0_deg": 120.0 },
+    { "types": ["O_CO", "C_CO", "N_AMIDE"], "k": 669.4, "theta0_deg": 122.0 },
+    {
+      "types": ["CT", "C_NITRILE", "N_NITRILE"],
+      "k": 209.2,
+      "theta0_deg": 180.0
+    },
+    { "types": ["O_CO", "C_CO", "O_ACID"], "k": 669.4, "theta0_deg": 122.0 },
+    { "types": ["CT", "C_CO", "O_ACID"], "k": 418.4, "theta0_deg": 110.0 },
+    { "types": ["C_CO", "O_ACID", "H_O"], "k": 460.2, "theta0_deg": 108.5 }
   ],
   "dihedrals": [
     {

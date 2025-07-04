@@ -40,10 +40,12 @@ fn setup_shared_assets(
 ) {
     let bond_mesh_handle = meshes.add(Cylinder::new(0.015, 1.0));
     let bond_material_handle = materials.add(Color::srgb(0.8, 0.8, 0.2));
+    let undefined_bond_material_handle = materials.add(Color::srgb(0.8, 0.2, 0.2)); // A bright red
 
     commands.insert_resource(SharedAssetHandles {
         bond_mesh: bond_mesh_handle,
         bond_material: bond_material_handle,
+        undefined_bond_material: undefined_bond_material_handle,
     });
 }
 
@@ -143,34 +145,28 @@ fn load_molecule_from_config(
 
     info!("Building bond list...");
     for bond_spec in &molecule_config.bonds {
-        let entity1 = id_to_entity_map.get(&bond_spec[0]).unwrap();
-        let entity2 = id_to_entity_map.get(&bond_spec[1]).unwrap();
+        let entity1 = id_to_entity_map[&bond_spec.atoms[0]];
+        let entity2 = id_to_entity_map[&bond_spec.atoms[1]];
+        let order = match bond_spec.order.as_str() {
+            "Double" => BondOrder::Double,
+            "Triple" => BondOrder::Triple, // You need to add this to the BondOrder enum
+            _ => BondOrder::Single,
+        };
         connectivity.bonds.push(Bond {
-            a: *entity1,
-            b: *entity2,
-            order: BondOrder::Single,
+            a: entity1,
+            b: entity2,
+            order,
         });
-    }
-
-    info!("Building double bond list (if any)...");
-    if let Some(double_bonds) = molecule_config.double_bonds {
-        for bond_spec in &double_bonds {
-            let entity1 = id_to_entity_map.get(&bond_spec[0]).unwrap();
-            let entity2 = id_to_entity_map.get(&bond_spec[1]).unwrap();
-            connectivity.bonds.push(Bond {
-                a: *entity1,
-                b: *entity2,
-                order: BondOrder::Double,
-            });
-        }
     }
 
     let bond_mesh_handle = meshes.add(Cylinder::new(0.015, 1.0));
     let bond_material_handle = materials.add(Color::srgb(0.8, 0.8, 0.2));
+    let undefined_bond_material_handle = materials.add(Color::srgb(0.8, 0.2, 0.2)); // A bright red
 
     commands.insert_resource(SharedAssetHandles {
         bond_mesh: bond_mesh_handle,
         bond_material: bond_material_handle,
+        undefined_bond_material: undefined_bond_material_handle,
     });
 }
 
@@ -258,6 +254,7 @@ fn spawn_bond_visuals(
         let num_strands = match bond.order {
             BondOrder::Single => 1,
             BondOrder::Double => 2,
+            BondOrder::Triple => 3,
         };
 
         for i in 0..num_strands {
