@@ -9,6 +9,7 @@ mod ui;
 mod visualization;
 
 use bevy::prelude::*;
+use bevy_egui::EguiPlugin;
 use bevy_panorbit_camera::PanOrbitCameraPlugin;
 use clap::Parser;
 use interaction::InteractionPlugin;
@@ -87,6 +88,7 @@ fn main() {
         })
         .add_plugins((
             PanOrbitCameraPlugin,
+            EguiPlugin::default(),
             CorePlugin,
             SetupPlugin,
             SimulationPlugin,

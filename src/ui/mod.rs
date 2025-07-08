@@ -17,20 +17,19 @@ use pause_menu::PauseMenuPlugin;
 // This set can be used if any UI systems need to be ordered relative to each other.
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct UiSet;
+use bevy_egui::input::egui_wants_any_keyboard_input;
 
 pub struct UIPlugin;
 
 impl Plugin for UIPlugin {
     fn build(&self, app: &mut App) {
-        app
-            // Add any resources or events shared across all UI modules here
-            .configure_sets(Update, UiSet.after(InteractionSet))
+        app.configure_sets(Update, UiSet.after(InteractionSet))
             .add_plugins((HudPlugin, InfoPanelPlugin, HelpPanelPlugin, PauseMenuPlugin))
             // Keep global UI controls here
             .add_systems(
                 Update,
                 (
-                    handle_simulation_control,
+                    handle_simulation_control.run_if(not(egui_wants_any_keyboard_input)),
                     continuous_simulation,
                     track_active_wall_time,
                 )

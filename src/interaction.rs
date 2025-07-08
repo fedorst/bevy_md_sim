@@ -6,6 +6,8 @@ use crate::simulation::PhysicsSet;
 use crate::visualization::VisualizationSet;
 use bevy::color::palettes::basic::{BLACK, BLUE, RED};
 use bevy::prelude::*;
+use bevy_egui::EguiContexts;
+use bevy_egui::input::egui_wants_any_keyboard_input;
 use bevy_panorbit_camera::PanOrbitCamera;
 use bevy_picking::prelude::MeshPickingPlugin;
 use bevy_picking::{
@@ -13,7 +15,6 @@ use bevy_picking::{
     hover::PickingInteraction,
 };
 use std::collections::HashMap;
-
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct InteractionSet;
 
@@ -32,13 +33,17 @@ impl Plugin for InteractionPlugin {
             .add_systems(
                 Update,
                 (
-                    (manage_bonds, delete_selected_atom),
+                    (
+                        manage_bonds.run_if(not(egui_wants_any_keyboard_input)),
+                        delete_selected_atom.run_if(not(egui_wants_any_keyboard_input)),
+                    ),
                     ApplyDeferred,
                     (
                         rebuild_on_event,
                         update_highlights,
                         draw_selection_gizmos,
-                        focus_camera_on_selection,
+                        focus_camera_on_selection.run_if(not(egui_wants_any_keyboard_input)),
+                        control_pan_orbit_camera,
                     ),
                 )
                     .chain()
@@ -47,6 +52,17 @@ impl Plugin for InteractionPlugin {
             );
     }
 }
+
+fn control_pan_orbit_camera(mut camera_q: Query<&mut PanOrbitCamera>, mut contexts: EguiContexts) {
+    let Ok(ctx) = contexts.ctx_mut() else { return };
+    let egui_wants_input = ctx.wants_pointer_input() || ctx.wants_keyboard_input();
+    if let Ok(mut camera) = camera_q.single_mut() {
+        if camera.enabled == egui_wants_input {
+            camera.enabled = !egui_wants_input;
+        }
+    }
+}
+
 fn manage_bonds(
     keys: Res<ButtonInput<KeyCode>>,
     selection: Res<SelectionState>,
@@ -204,7 +220,12 @@ fn handle_selection(
     mut selection: ResMut<SelectionState>,
     atoms: Query<&Atom>,
     keys: Res<ButtonInput<KeyCode>>,
+    mut contexts: EguiContexts,
 ) {
+    let Ok(ctx) = contexts.ctx_mut() else { return };
+    if ctx.wants_pointer_input() {
+        return;
+    }
     let target = trigger.target();
     if atoms.get(target).is_ok() {
         let shift_pressed = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);

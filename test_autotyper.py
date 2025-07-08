@@ -96,7 +96,7 @@ class TestAtomTyper(unittest.TestCase):
             "O_COO": 2,
             "N_PLUS": 1,
             "H_C": 3,
-            "H_N": 3,  # <-- CORRECTED: Was H_O
+            "H_N": 3,
         }
         actual_types = self._run_test_and_get_type_counts(smiles, "Phenylalanine (Zwitterion)")
         self.assertDictEqual(expected_types, actual_types)

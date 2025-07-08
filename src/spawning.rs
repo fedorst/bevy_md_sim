@@ -74,7 +74,7 @@ fn trigger_smiles_validation(
         for (entity, mut task_component) in &mut existing_task_query {
             info!("[Validation] Cancelling previous validation task.");
             // Detaching the task handle prevents the result from being sent.
-            if let Some(old_task) = Option::take(&mut task_component.0) {
+            if let Some(_old_task) = Option::take(&mut task_component.0) {
                 // `old_task` is now owned by this scope. When the scope ends,
                 // `old_task` is dropped, which signals bevy_tasks to cancel it.
                 // We don't need to call any method on it.

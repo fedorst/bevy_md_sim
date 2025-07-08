@@ -6,20 +6,16 @@ use crate::resources::{
     SystemEnergy, Thermostat, ThermostatScale,
 };
 use crate::spawning::{SMILESValidationResult, SpawnMoleculeFromSMILESEvent, ValidateSMILESEvent};
-use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
-use bevy::ui::widget::TextUiWriter;
+use bevy_egui::EguiPrimaryContextPass;
+use bevy_egui::{EguiContexts, egui};
 
-// Add this new resource
 #[derive(Resource, Default)]
-struct SmilesInput {
-    text: String,
-    active: bool,
+struct EguiInputState {
+    smiles: String,
+    is_valid: bool,
+    error_message: String,
 }
-
-// Add this new component
-#[derive(Component)]
-struct SmilesInputField;
 
 #[derive(Component)]
 struct EnergyDisplayText;
@@ -34,156 +30,89 @@ pub struct HudPlugin;
 
 impl Plugin for HudPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<SmilesInput>()
-            .add_systems(Startup, (setup_hud_ui, setup_smiles_input_ui))
+        app.init_resource::<EguiInputState>()
+            .add_systems(Startup, setup_hud_ui)
+            .add_systems(EguiPrimaryContextPass, smiles_input_egui_system)
             .add_systems(
                 Update,
                 (
+                    update_validation_state,
                     update_pause_text,
                     update_time_display,
-                    update_temp_display,
                     update_energy_display,
-                    handle_smiles_input_click,
-                    handle_smiles_keyboard,
-                    update_smiles_display,
-                    handle_validation_ui,
+                    update_temp_display,
                 )
-                    .in_set(UiSet),
+                    .after(UiSet),
             );
     }
 }
-
-fn setup_smiles_input_ui(mut commands: Commands) {
-    commands
-        .spawn((
-            Button,
-            SmilesInputField,
-            Node {
-                position_type: PositionType::Absolute,
-                bottom: Val::Px(10.0),
-                left: Val::Percent(50.0),
-                width: Val::Px(300.0),
-                border: UiRect::all(Val::Px(2.0)),
-                padding: UiRect::all(Val::Px(5.0)),
-                justify_content: JustifyContent::FlexStart,
-                align_items: AlignItems::Center,
-                ..default()
-            },
-            Transform::from_translation(Vec3::new(-150.0, 0.0, 0.0)),
-            BackgroundColor(Color::srgb(0.1, 0.1, 0.1)),
-            BorderColor(Color::WHITE),
-        ))
-        .with_child(Text::new("Click to type SMILES..."));
-}
-
-fn handle_smiles_input_click(
-    mut interaction_q: Query<
-        (&Interaction, &mut BorderColor),
-        (Changed<Interaction>, With<SmilesInputField>),
-    >,
-    mut input_state: ResMut<SmilesInput>,
-) {
-    if let Ok((interaction, mut border)) = interaction_q.single_mut() {
-        if *interaction == Interaction::Pressed {
-            input_state.active = true;
-            *border = Color::WHITE.into();
-        }
-    }
-}
-
-fn update_smiles_display(
-    state: Res<SmilesInput>,
-    input_field_q: Query<&Children, With<SmilesInputField>>,
-    mut text_writer: TextUiWriter,
-) {
-    if state.is_changed() {
-        if let Ok(children) = input_field_q.single() {
-            if let Some(text_entity) = children.first() {
-                *text_writer.text(*text_entity, 0) = if state.text.is_empty() && !state.active {
-                    "Click to type SMILES...".to_string()
-                } else {
-                    format!("{}{}", state.text, if state.active { "_" } else { "" })
-                };
-            }
-        }
-    }
-}
-
-fn handle_validation_ui(
-    mut validation_results: EventReader<SMILESValidationResult>,
-    mut border_q: Query<&mut BorderColor, With<SmilesInputField>>,
-    input_state: Res<SmilesInput>,
-) {
-    if let Ok(mut border) = border_q.single_mut() {
-        if let Some(event) = validation_results.read().last() {
-            info!("[UI] Received validation result: {:?}", event.0);
-            if input_state.active {
-                match &event.0 {
-                    Ok(_) => *border = Color::WHITE.into(),
-                    Err(e) if !e.trim().is_empty() => {
-                        *border = Color::linear_rgba(0.8, 0.1, 0.1, 1.0).into()
-                    }
-                    Err(_) => *border = Color::linear_rgba(0.8, 0.1, 0.1, 1.0).into(),
-                }
-            }
-        }
-
-        if input_state.is_changed() && !input_state.active {
-            *border = Color::WHITE.into();
-        }
-    }
-}
-
-fn handle_smiles_keyboard(
-    mut input_state: ResMut<SmilesInput>,
-    mut key_evr: EventReader<KeyboardInput>,
-    // --- CHANGE these writers ---
-    mut spawn_writer: EventWriter<SpawnMoleculeFromSMILESEvent>,
+fn smiles_input_egui_system(
+    mut contexts: EguiContexts,
+    mut egui_state: ResMut<EguiInputState>,
     mut validate_writer: EventWriter<ValidateSMILESEvent>,
+    mut spawn_writer: EventWriter<SpawnMoleculeFromSMILESEvent>,
 ) {
-    if !input_state.active {
-        return;
-    }
+    let Ok(ctx) = contexts.ctx_mut() else { return };
 
-    let mut string_changed = false;
-    for ev in key_evr.read() {
-        if !ev.state.is_pressed() {
-            continue;
+    let window = egui::Window::new("Molecule Input")
+        .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -20.0))
+        .collapsible(false)
+        .resizable(false)
+        .title_bar(false);
+
+    // --- THE FIX: Use the resolved `ctx` to get the style ---
+    let frame_stroke = if egui_state.is_valid {
+        egui::Stroke::new(1.0, egui::Color32::from_rgb(0, 255, 255)) // Cyan
+    } else {
+        egui::Stroke::new(2.0, egui::Color32::from_rgb(255, 50, 50)) // Red
+    };
+    let frame = egui::Frame::group(&ctx.style()).stroke(frame_stroke);
+
+    // --- THE FIX: Pass the resolved `ctx` to the show method ---
+    window.frame(frame).show(ctx, |ui| {
+        ui.set_width(300.0);
+        ui.label("SMILES String:");
+
+        let text_edit = egui::TextEdit::singleline(&mut egui_state.smiles)
+            .hint_text("Type SMILES and press Enter...");
+
+        let mut response = ui.add(text_edit);
+
+        if !egui_state.is_valid {
+            response = response.on_hover_text(&egui_state.error_message);
         }
 
-        match &ev.logical_key {
-            Key::Character(chars) => {
-                input_state.text.push_str(chars);
-                string_changed = true;
+        if response.changed() {
+            validate_writer.write(ValidateSMILESEvent(egui_state.smiles.clone()));
+        }
+
+        if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+            if !egui_state.smiles.is_empty() {
+                spawn_writer.write(SpawnMoleculeFromSMILESEvent(egui_state.smiles.clone()));
             }
-            Key::Backspace => {
-                input_state.text.pop();
-                string_changed = true;
+        }
+    });
+}
+
+fn update_validation_state(
+    mut egui_state: ResMut<EguiInputState>,
+    mut validation_results: EventReader<SMILESValidationResult>,
+) {
+    if let Some(event) = validation_results.read().last() {
+        match &event.0 {
+            Ok(_) => {
+                egui_state.is_valid = true;
+                egui_state.error_message.clear();
             }
-            Key::Enter => {
-                if !input_state.text.is_empty() {
-                    // On Enter, send the final spawn event
-                    spawn_writer.write(SpawnMoleculeFromSMILESEvent(input_state.text.clone()));
+            Err(e) => {
+                egui_state.is_valid = false;
+                if e.trim().is_empty() {
+                    egui_state.error_message = "Invalid SMILES".to_string();
+                } else {
+                    egui_state.error_message = e.clone();
                 }
-                input_state.text.clear();
-                input_state.active = false;
-                string_changed = true; // To reset color
             }
-            Key::Escape => {
-                input_state.active = false;
-                string_changed = true; // To reset color
-            }
-            _ => {}
         }
-    }
-
-    // If the string changed, send a validation event.
-    if string_changed && input_state.active {
-        info!(
-            "[UI] String changed. Sending validation event for: '{}'",
-            input_state.text
-        );
-        validate_writer.write(ValidateSMILESEvent(input_state.text.clone()));
     }
 }
 
@@ -255,9 +184,6 @@ fn setup_hud_ui(mut commands: Commands) {
         EnergyDisplayText,
     ));
 }
-
-// Move these systems from the old ui.rs into here.
-// Their code does not need to change, but you'll need to update their `use` statements.
 
 fn update_energy_display(
     energy: Res<SystemEnergy>,
