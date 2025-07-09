@@ -67,7 +67,18 @@ impl Plugin for CorePlugin {
             .init_resource::<SystemEnergy>()
             .init_resource::<CurrentTemperature>()
             .init_resource::<AtomIdMap>()
-            .init_resource::<ExcludedPairs>();
+            .init_resource::<ExcludedPairs>()
+            .add_systems(Update, track_active_wall_time);
+    }
+}
+
+fn track_active_wall_time(
+    time: Res<Time>,
+    sim_state: Res<SimulationState>,
+    mut active_wall_time: ResMut<ActiveWallTime>,
+) {
+    if !sim_state.paused {
+        active_wall_time.0 += time.delta_secs();
     }
 }
 

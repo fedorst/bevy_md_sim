@@ -41,24 +41,9 @@ pub struct SimulationState {
     pub paused: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ActiveInput {
-    Dt,
-    Temp,
-    Tau,
-    ForceMultiplier,
-}
-
 #[derive(Resource, Default)]
 pub struct PauseMenuState {
     pub visible: bool,
-    // Which input field is currently focused
-    pub active_input: Option<ActiveInput>,
-    // Temporary string values for each input field
-    pub dt_str: String,
-    pub temp_str: String,
-    pub tau_str: String,
-    pub force_multiplier_str: String,
 }
 
 #[derive(Resource, Deref, DerefMut)]

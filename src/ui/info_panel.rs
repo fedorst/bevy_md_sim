@@ -1,61 +1,48 @@
 // src/ui/info_panel.rs
 
-use super::UiSet;
 use crate::components::{Atom, Force, Velocity};
 use crate::interaction::SelectionState;
 use crate::resources::{AtomIdMap, BondOrder, ForceField, SystemConnectivity};
 use bevy::prelude::*;
-use bevy::ui::widget::TextUiWriter;
+use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
-#[derive(Component)]
-pub struct DebugInfoPanel;
+/// A resource to control the state of the egui info window.
+#[derive(Resource)]
+struct InfoPanelState {
+    is_open: bool,
+}
+
+impl Default for InfoPanelState {
+    fn default() -> Self {
+        Self { is_open: true }
+    }
+}
 
 pub struct InfoPanelPlugin;
 
 impl Plugin for InfoPanelPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_info_panel_ui)
-            .add_systems(Update, update_info_panel.in_set(UiSet));
+        app.init_resource::<InfoPanelState>()
+            .add_systems(EguiPrimaryContextPass, info_panel_egui_system);
     }
 }
 
-fn setup_info_panel_ui(mut commands: Commands) {
-    commands.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            bottom: Val::Px(10.0),
-            left: Val::Px(10.0),
-            width: Val::Px(384.0),
-            padding: UiRect::all(Val::Px(10.0)),
-            flex_direction: FlexDirection::Column,
-            ..default()
-        },
-        BackgroundColor(Color::BLACK.with_alpha(0.75)),
-        Text::new("Select an atom for details"),
-        TextFont {
-            font_size: 16.0,
-            ..default()
-        },
-        DebugInfoPanel,
-    ));
-}
-
-// --- Systems and Helpers (copied from original ui.rs) ---
-
-fn update_info_panel(
+/// The single system that draws the entire info panel using egui.
+fn info_panel_egui_system(
+    mut contexts: EguiContexts,
+    mut panel_state: ResMut<InfoPanelState>,
     selection: Res<SelectionState>,
     connectivity: Res<SystemConnectivity>,
     force_field: Res<ForceField>,
     atom_id_map: Res<AtomIdMap>,
     atom_query: Query<(&Atom, &Transform, &Velocity, &Force)>,
-    panel_query: Query<Entity, With<DebugInfoPanel>>,
-    mut writer: TextUiWriter,
 ) {
-    let Ok(panel_entity) = panel_query.single() else {
-        return;
-    };
+    // First, get the mutable egui context, returning early if it's not available.
+    let Ok(ctx) = contexts.ctx_mut() else { return };
+
+    // Use the same logic as before to generate the text string.
     let info_text = match selection.selected.len() {
-        0 => "Select an atom for details".to_string(),
+        0 => "Select an atom for details.".to_string(),
         1 => display_single_atom_info(selection.selected[0], &atom_id_map, &atom_query),
         2 => display_bond_info(
             selection.selected[0],
@@ -76,7 +63,17 @@ fn update_info_panel(
         .unwrap_or_else(|| format!("Selected {} atoms.", selection.selected.len())),
         _ => format!("Selected {} atoms.", selection.selected.len()),
     };
-    *writer.text(panel_entity, 0) = info_text;
+
+    // Create a floating, movable, and closable window for the info panel.
+    egui::Window::new("Selection Info")
+        .open(&mut panel_state.is_open) // Binds visibility to our resource
+        .anchor(egui::Align2::LEFT_BOTTOM, egui::vec2(10.0, -10.0)) // Initial position
+        .resizable(true)
+        .default_width(250.0)
+        .show(ctx, |ui| {
+            // Use a monospace font for better alignment and a "debug" feel.
+            ui.monospace(info_text);
+        });
 }
 
 fn display_single_atom_info(

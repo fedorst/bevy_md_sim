@@ -1,101 +1,131 @@
 // src/ui/help_panel.rs
 
-use super::UiSet;
 use crate::components::Atom;
 use crate::interaction::SelectionState;
 use bevy::picking::hover::PickingInteraction;
 use bevy::prelude::*;
+use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
-#[derive(Component)]
-struct HelpPanel;
+/// A resource to control the visibility of the help window.
 #[derive(Resource, Default)]
-struct HelpState {
-    pub visible: bool,
+struct HelpPanelState {
+    is_open: bool,
 }
 
 pub struct HelpPanelPlugin;
 
 impl Plugin for HelpPanelPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<HelpState>()
-            .add_systems(Startup, setup_help_panel_ui)
-            .add_systems(
-                Update,
-                (toggle_help_visibility, update_help_panel).in_set(UiSet),
-            );
+        app.init_resource::<HelpPanelState>()
+            // We add a system to toggle visibility and one to draw the UI.
+            .add_systems(Update, toggle_help_visibility)
+            .add_systems(EguiPrimaryContextPass, help_panel_egui_system);
     }
 }
 
-fn setup_help_panel_ui(mut commands: Commands) {
-    commands.spawn((
-        Text::new("h: Toggle Help"),
-        Node {
-            position_type: PositionType::Absolute,
-            bottom: Val::Px(10.0),
-            right: Val::Px(10.0),
-            padding: UiRect::all(Val::Px(10.0)),
-            width: Val::Px(384.0),
-            ..default()
-        },
-        BackgroundColor(Color::BLACK.with_alpha(0.75)),
-        TextFont {
-            font_size: 16.0,
-            ..default()
-        },
-        HelpPanel,
-    ));
-}
-
-// --- Systems (copied from original ui.rs) ---
-
-fn toggle_help_visibility(keys: Res<ButtonInput<KeyCode>>, mut help_state: ResMut<HelpState>) {
+/// This system listens for the 'H' key to toggle the help window's visibility.
+fn toggle_help_visibility(keys: Res<ButtonInput<KeyCode>>, mut help_state: ResMut<HelpPanelState>) {
     if keys.just_pressed(KeyCode::KeyH) {
-        help_state.visible = !help_state.visible;
+        help_state.is_open = !help_state.is_open;
     }
 }
 
-fn update_help_panel(
-    help_state: Res<HelpState>,
+/// The single system that draws the entire help panel as an egui window.
+fn help_panel_egui_system(
+    mut contexts: EguiContexts,
+    mut panel_state: ResMut<HelpPanelState>,
     selection: Res<SelectionState>,
+    // We query for atoms being hovered over to provide contextual help.
     hover_query: Query<&PickingInteraction, With<Atom>>,
-    mut help_panel_query: Query<(&mut Text, &mut Visibility), With<HelpPanel>>,
 ) {
-    let Ok((mut text, mut visibility)) = help_panel_query.single_mut() else {
-        return;
-    };
+    let Ok(ctx) = contexts.ctx_mut() else { return };
 
-    if !help_state.visible {
-        *visibility = Visibility::Hidden;
-        let prompt = "h: Toggle Help".to_string();
-        if text.0 != prompt {
-            text.0 = prompt;
-        }
-        return;
+    // This defines the window and binds its open/closed state to our resource.
+    // The user can close it with the 'x' button, and 'H' will reopen it.
+    if panel_state.is_open {
+        egui::Window::new("Help")
+            .open(&mut panel_state.is_open)
+            .anchor(egui::Align2::RIGHT_BOTTOM, egui::vec2(-10.0, -10.0))
+            .resizable(false)
+            .show(ctx, |ui| {
+                // Using a grid layout makes it easy to align key/description pairs.
+                egui::Grid::new("help_grid")
+                    .num_columns(2)
+                    .spacing([20.0, 4.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        ui.label("h");
+                        ui.label("Toggle this help window");
+                        ui.end_row();
+
+                        ui.label("Space");
+                        ui.label("Toggle simulation pause/resume");
+                        ui.end_row();
+
+                        ui.label("LMB Drag");
+                        ui.label("Rotate Camera");
+                        ui.end_row();
+
+                        ui.label("RMB Drag");
+                        ui.label("Pan Camera");
+                        ui.end_row();
+
+                        ui.label("Scroll");
+                        ui.label("Zoom Camera");
+                        ui.end_row();
+
+                        // Contextual help based on selection
+                        if !selection.selected.is_empty() {
+                            ui.separator();
+                            ui.end_row();
+
+                            ui.label("F");
+                            ui.label("Focus camera on last selected atom");
+                            ui.end_row();
+
+                            ui.label("Shift+LMB");
+                            ui.label("Add/Remove from multi-selection");
+                            ui.end_row();
+
+                            ui.label("Delete");
+                            ui.label("Delete selected atom(s)");
+                            ui.end_row();
+                        }
+
+                        if selection.selected.len() == 2 {
+                            ui.separator();
+                            ui.end_row();
+
+                            ui.label("b");
+                            ui.label("Create or delete bond");
+                            ui.end_row();
+                        }
+                    });
+
+                // Add a separator and some extra info at the bottom
+                ui.separator();
+                let is_hovering_atom = hover_query
+                    .iter()
+                    .any(|i| *i == PickingInteraction::Hovered);
+                if is_hovering_atom {
+                    ui.label("💡 Tip: Click on an atom to select it.");
+                }
+            });
+    } else {
+        let area_id = egui::Id::new("Help Opener Area");
+        egui::Area::new(area_id)
+            .anchor(egui::Align2::RIGHT_BOTTOM, egui::vec2(0.0, 0.0))
+            .show(ctx, |ui| {
+                // Add a frame for better visuals
+                egui::Frame::popup(ui.style()).show(ui, |ui| {
+                    // This button acts as the "stub" for the closed window.
+                    let response = ui.button("❔ Help (H)");
+                    if response.clicked() {
+                        panel_state.is_open = true;
+                    }
+                    // Optional: Add a tooltip to the button itself
+                    response.on_hover_text("Click or press 'H' to open the help panel.");
+                });
+            });
     }
-    *visibility = Visibility::Visible;
-
-    let is_hovering_atom = hover_query
-        .iter()
-        .any(|i| *i == PickingInteraction::Hovered);
-
-    let mut lines = vec!["h: Toggle Help", "Space: Toggle Pause"];
-
-    if is_hovering_atom {
-        lines.push("LMB (click): Select / Deselect Atom");
-    }
-
-    lines.push("LMB (drag): Rotate Camera");
-    lines.push("RMB (drag): Pan Camera");
-    lines.push("F: Focus on last Selected");
-
-    if !selection.selected.is_empty() {
-        lines.push("Shift+LMB: Add/Remove from Selection");
-        lines.push("Delete: Delete Selected");
-    }
-
-    if selection.selected.len() == 2 {
-        lines.push("b: Toggle Bond");
-    }
-
-    text.0 = lines.join("\n");
 }

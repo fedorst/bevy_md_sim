@@ -6,7 +6,7 @@ mod info_panel;
 mod pause_menu;
 
 use crate::interaction::InteractionSet;
-use crate::resources::{ActiveWallTime, PauseMenuState, SimulationState, StepSimulation};
+use crate::resources::{SimulationState, StepSimulation};
 use bevy::prelude::*;
 
 use help_panel::HelpPanelPlugin;
@@ -17,7 +17,6 @@ use pause_menu::PauseMenuPlugin;
 // This set can be used if any UI systems need to be ordered relative to each other.
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct UiSet;
-use bevy_egui::input::egui_wants_any_keyboard_input;
 
 pub struct UIPlugin;
 
@@ -28,12 +27,7 @@ impl Plugin for UIPlugin {
             // Keep global UI controls here
             .add_systems(
                 Update,
-                (
-                    handle_simulation_control.run_if(not(egui_wants_any_keyboard_input)),
-                    continuous_simulation,
-                    track_active_wall_time,
-                )
-                    .in_set(UiSet),
+                (handle_simulation_control, continuous_simulation).in_set(UiSet),
             );
     }
 }
@@ -43,33 +37,17 @@ impl Plugin for UIPlugin {
 
 fn handle_simulation_control(
     mut sim_state: ResMut<SimulationState>,
-    mut menu_state: ResMut<PauseMenuState>,
     mut step: ResMut<StepSimulation>,
     keys: Res<ButtonInput<KeyCode>>,
 ) {
+    // Space bar ONLY toggles the paused state of the simulation.
     if keys.just_pressed(KeyCode::Space) {
-        if menu_state.visible {
-            // If the menu is open, Space closes it and ALWAYS unpauses.
-            menu_state.visible = false;
-            sim_state.paused = false;
-        } else {
-            // Otherwise, it's just a simple toggle.
-            sim_state.paused = !sim_state.paused;
-        }
+        sim_state.paused = !sim_state.paused;
     }
-    // Right arrow steps one frame when paused
+
+    // Right arrow still steps one frame when paused.
     if sim_state.paused && keys.just_pressed(KeyCode::ArrowRight) {
         step.0 = true;
-    }
-}
-
-fn track_active_wall_time(
-    time: Res<Time>,
-    sim_state: Res<SimulationState>,
-    mut active_wall_time: ResMut<ActiveWallTime>,
-) {
-    if !sim_state.paused {
-        active_wall_time.0 += time.delta_secs();
     }
 }
 
