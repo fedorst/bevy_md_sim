@@ -1,5 +1,6 @@
 // src/ui/mod.rs
 
+mod force_inspector;
 mod help_panel;
 mod hud;
 mod info_panel;
@@ -9,11 +10,11 @@ use crate::interaction::InteractionSet;
 use crate::resources::{SimulationState, StepSimulation};
 use bevy::prelude::*;
 
+use force_inspector::ForceInspectorPlugin;
 use help_panel::HelpPanelPlugin;
 use hud::HudPlugin;
 use info_panel::InfoPanelPlugin;
 use pause_menu::PauseMenuPlugin;
-
 // This set can be used if any UI systems need to be ordered relative to each other.
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct UiSet;
@@ -23,7 +24,13 @@ pub struct UIPlugin;
 impl Plugin for UIPlugin {
     fn build(&self, app: &mut App) {
         app.configure_sets(Update, UiSet.after(InteractionSet))
-            .add_plugins((HudPlugin, InfoPanelPlugin, HelpPanelPlugin, PauseMenuPlugin))
+            .add_plugins((
+                HudPlugin,
+                InfoPanelPlugin,
+                HelpPanelPlugin,
+                PauseMenuPlugin,
+                ForceInspectorPlugin,
+            ))
             // Keep global UI controls here
             .add_systems(
                 Update,
