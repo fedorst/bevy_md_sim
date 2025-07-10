@@ -67,6 +67,7 @@ impl Plugin for CorePlugin {
             .init_resource::<ActiveWallTime>()
             .init_resource::<ThermostatScale>()
             .init_resource::<SystemEnergy>()
+            .init_resource::<EnergyHistory>()
             .init_resource::<CurrentTemperature>()
             .init_resource::<AtomIdMap>()
             .init_resource::<ExcludedPairs>()

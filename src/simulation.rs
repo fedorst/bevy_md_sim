@@ -265,10 +265,11 @@ fn calculate_kinetic_energy(
     mut energy: ResMut<SystemEnergy>,
     query: Query<(&Atom, &Velocity)>,
     force_field: Res<ForceField>,
+    mut step_count: ResMut<StepCount>,
+    mut history: ResMut<EnergyHistory>,
 ) {
     let mut kinetic_energy = 0.0;
     for (atom_type, velocity) in &query {
-        // SAFE LOOKUP
         if let Some(atom_params) = force_field.atom_types.get(&atom_type.type_name) {
             kinetic_energy += 0.5 * atom_params.mass * velocity.length_squared();
         } else {
@@ -280,6 +281,17 @@ fn calculate_kinetic_energy(
     }
     energy.kinetic = kinetic_energy;
     energy.total = energy.potential + energy.kinetic;
+
+    let step = step_count.0 as f64;
+    history.potential.push_back((step, energy.potential as f64));
+    history.kinetic.push_back((step, energy.kinetic as f64));
+    history.total.push_back((step, energy.total as f64));
+
+    if history.potential.len() > history.capacity {
+        history.potential.pop_front();
+        history.kinetic.pop_front();
+        history.total.pop_front();
+    }
 }
 
 fn sum_total_forces(mut query: Query<&mut Force>, multiplier: Res<ForceMultiplier>) {

@@ -1,6 +1,27 @@
 use bevy::prelude::*;
 use serde::Deserialize;
+use std::collections::VecDeque;
 use std::collections::{HashMap, HashSet};
+
+#[derive(Resource)]
+pub struct EnergyHistory {
+    pub potential: VecDeque<(f64, f64)>, // (step, value)
+    pub kinetic: VecDeque<(f64, f64)>,
+    pub total: VecDeque<(f64, f64)>,
+    pub capacity: usize,
+}
+
+impl Default for EnergyHistory {
+    fn default() -> Self {
+        let capacity = 500; // Store the last 500 steps
+        Self {
+            potential: VecDeque::with_capacity(capacity),
+            kinetic: VecDeque::with_capacity(capacity),
+            total: VecDeque::with_capacity(capacity),
+            capacity,
+        }
+    }
+}
 
 // data structures used by resources
 #[derive(Debug, Copy, Clone)]

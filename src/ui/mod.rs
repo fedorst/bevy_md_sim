@@ -5,6 +5,7 @@ mod help_panel;
 mod hud;
 mod info_panel;
 mod pause_menu;
+mod system_metrics_panel;
 
 use crate::interaction::InteractionSet;
 use crate::resources::{SimulationState, StepSimulation};
@@ -15,6 +16,7 @@ use help_panel::HelpPanelPlugin;
 use hud::HudPlugin;
 use info_panel::InfoPanelPlugin;
 use pause_menu::PauseMenuPlugin;
+use system_metrics_panel::SystemMetricsPanelPlugin;
 // This set can be used if any UI systems need to be ordered relative to each other.
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct UiSet;
@@ -30,6 +32,7 @@ impl Plugin for UIPlugin {
                 HelpPanelPlugin,
                 PauseMenuPlugin,
                 ForceInspectorPlugin,
+                SystemMetricsPanelPlugin,
             ))
             // Keep global UI controls here
             .add_systems(
