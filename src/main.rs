@@ -1,5 +1,6 @@
 mod components;
 mod config;
+mod cursor;
 mod interaction;
 mod resources;
 mod setup;
@@ -12,6 +13,7 @@ use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
 use bevy_panorbit_camera::PanOrbitCameraPlugin;
 use clap::Parser;
+use cursor::CustomCursorPlugin;
 use interaction::InteractionPlugin;
 use resources::*;
 use setup::SetupPlugin;
@@ -107,6 +109,7 @@ fn main() {
             VisualizationPlugin,
             InteractionPlugin,
             SpawningPlugin,
+            CustomCursorPlugin,
         ))
         .run();
 }
