@@ -53,7 +53,7 @@ fn setup_cursor_icons(mut commands: Commands, asset_server: Res<AssetServer>) {
             flip_x: false,
             flip_y: false,
             rect: None,
-            hotspot: (16, 16), // Adjust based on your image
+            hotspot: (0, 0), // Adjust based on your image
         },
     ));
 
@@ -64,7 +64,7 @@ fn setup_cursor_icons(mut commands: Commands, asset_server: Res<AssetServer>) {
             flip_x: false,
             flip_y: false,
             rect: None,
-            hotspot: (16, 16), // Adjust based on your image
+            hotspot: (0, 0), // Adjust based on your image
         },
     ));
 
@@ -75,7 +75,7 @@ fn setup_cursor_icons(mut commands: Commands, asset_server: Res<AssetServer>) {
             flip_x: false,
             flip_y: false,
             rect: None,
-            hotspot: (16, 16), // Adjust based on your image
+            hotspot: (0, 0), // Adjust based on your image
         },
     ));
 
@@ -86,7 +86,7 @@ fn setup_cursor_icons(mut commands: Commands, asset_server: Res<AssetServer>) {
             flip_x: false,
             flip_y: false,
             rect: None,
-            hotspot: (16, 16), // Adjust based on your image
+            hotspot: (0, 0), // Adjust based on your image
         },
     ));
 
