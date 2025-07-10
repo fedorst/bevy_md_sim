@@ -1,4 +1,4 @@
-use crate::components::{Acceleration, Atom, Force, Velocity};
+use crate::components::{Acceleration, Atom, Constraint, Force, Velocity};
 use crate::resources::*;
 use bevy::prelude::*;
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
@@ -14,7 +14,7 @@ impl Plugin for SimulationPlugin {
                 integrate_position_and_half_velocity,
                 reset_forces,
                 reset_energy,
-                calculate_bond_forces,
+                calculate_bond_and_constraint_forces,
                 calculate_angle_forces,
                 calculate_dihedral_forces,
                 calculate_non_bonded_forces,
@@ -332,32 +332,50 @@ fn calculate_angle_forces(
     }
 }
 
-fn calculate_bond_forces(
+fn calculate_bond_and_constraint_forces(
     connectivity: Res<SystemConnectivity>,
+    drag_state: Res<DragState>, // Just need to read the state
+    constraint_q: Query<(Entity, &Constraint)>,
     mut atom_query: Query<(&Transform, &mut Force, &Atom)>,
     force_field: Res<ForceField>,
     mut energy: ResMut<SystemEnergy>,
 ) {
+    // --- 1. The original bond force calculation loop (unchanged) ---
     for bond in &connectivity.bonds {
-        let Ok([(t1, mut f1, type1), (t2, mut f2, type2)]) =
+        if let Ok([(t1, mut f1, type1), (t2, mut f2, type2)]) =
             atom_query.get_many_mut([bond.a, bond.b])
-        else {
-            continue;
-        };
+        {
+            if let Some(&(bond_k, bond_r0)) = force_field.bond_params.get(&(
+                type1.type_name.clone(),
+                type2.type_name.clone(),
+                bond.order,
+            )) {
+                let vec = t2.translation - t1.translation;
+                let r = vec.length();
+                let force_magnitude = -bond_k * (r - bond_r0);
+                let force_vec = vec.normalize_or_zero() * force_magnitude;
+                f1.bond -= force_vec;
+                f2.bond += force_vec;
+                energy.potential += 0.5 * bond_k * (r - bond_r0).powi(2);
+            }
+        }
+    }
 
-        if let Some(&(bond_k, bond_r0)) = force_field.bond_params.get(&(
-            type1.type_name.clone(),
-            type2.type_name.clone(),
-            bond.order,
-        )) {
-            let vec = t2.translation - t1.translation;
-            let r = vec.length();
-            let force_magnitude = -bond_k * (r - bond_r0);
-            let force_vec = vec.normalize_or_zero() * force_magnitude;
-            f1.bond -= force_vec;
-            f2.bond += force_vec;
-            // for accum
-            energy.potential += 0.5 * bond_k * (r - bond_r0).powi(2);
+    // --- 2. YOUR ELEGANT GROUP DRAG LOGIC ---
+    if let (Some(initial_centroid), Some(target_centroid)) =
+        (drag_state.initial_centroid, drag_state.target_centroid)
+    {
+        // The delta is now calculated from the continuously updated target.
+        let delta = target_centroid - initial_centroid;
+
+        // Apply the constraint force to every selected atom.
+        for (i, (entity, constraint)) in constraint_q.iter().enumerate() {
+            if let Ok((atom_transform, mut force, _)) = atom_query.get_mut(entity) {
+                // The target for each atom is its starting position plus the shared delta.
+                let target_pos = drag_state.initial_positions[i] + delta;
+                let force_vec = (target_pos - atom_transform.translation) * constraint.stiffness;
+                force.bond += force_vec;
+            }
         }
     }
 }

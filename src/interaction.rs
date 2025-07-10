@@ -1,18 +1,21 @@
-use crate::components::{Atom, BondVisualization, Force, Velocity};
+use crate::components::{Atom, BondVisualization, Constraint, Force, Velocity};
+use crate::resources::DragState;
 use crate::resources::{
     Angle, Bond, BondOrder, ForceField, SharedAssetHandles, SystemConnectivity,
 };
 use crate::simulation::PhysicsSet;
 use crate::visualization::VisualizationSet;
 use bevy::color::palettes::basic::{BLACK, BLUE, RED};
+use bevy::math::primitives::InfinitePlane3d;
 use bevy::prelude::*;
 use bevy_egui::EguiContexts;
 use bevy_egui::input::egui_wants_any_keyboard_input;
-use bevy_panorbit_camera::PanOrbitCamera;
-use bevy_picking::prelude::MeshPickingPlugin;
+use bevy_panorbit_camera::{PanOrbitCamera, PanOrbitCameraSystemSet};
 use bevy_picking::{
     events::{Click, Pointer},
     hover::PickingInteraction,
+    pointer::PointerLocation,
+    prelude::{Drag, DragEnd, DragStart, MeshPickingPlugin},
 };
 use std::collections::HashMap;
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
@@ -28,37 +31,161 @@ impl Plugin for InteractionPlugin {
         app.configure_sets(Update, VisualizationSet.after(InteractionSet))
             .add_event::<RebuildConnectivityEvent>()
             .add_plugins(MeshPickingPlugin)
+            .init_resource::<DragState>()
+            .add_event::<Pointer<DragStart>>()
+            .add_event::<Pointer<Drag>>()
+            .add_event::<Pointer<DragEnd>>()
             .init_resource::<SelectionState>()
             .add_observer(handle_selection)
             .add_systems(
                 Update,
                 (
+                    handle_drag_start,
+                    handle_drag,
+                    handle_drag_end,
                     (
-                        manage_bonds.run_if(not(egui_wants_any_keyboard_input)),
-                        delete_selected_atom.run_if(not(egui_wants_any_keyboard_input)),
-                    ),
-                    ApplyDeferred,
-                    (
-                        rebuild_on_event,
-                        update_highlights,
-                        draw_selection_gizmos,
-                        focus_camera_on_selection.run_if(not(egui_wants_any_keyboard_input)),
-                        control_pan_orbit_camera,
-                    ),
+                        manage_bonds,
+                        delete_selected_atom,
+                        focus_camera_on_selection,
+                    )
+                        .run_if(not(egui_wants_any_keyboard_input)),
+                    rebuild_on_event,
+                    update_highlights,
+                    draw_selection_gizmos,
                 )
-                    .chain()
                     .in_set(InteractionSet)
                     .after(PhysicsSet),
+            )
+            .add_systems(
+                PreUpdate,
+                control_camera_activity.before(PanOrbitCameraSystemSet),
             );
     }
 }
 
-fn control_pan_orbit_camera(mut camera_q: Query<&mut PanOrbitCamera>, mut contexts: EguiContexts) {
+fn control_camera_activity(
+    mut camera_q: Query<&mut PanOrbitCamera>,
+    mut contexts: EguiContexts,
+    drag_state: Res<DragState>,
+) {
+    let Ok(mut camera) = camera_q.single_mut() else {
+        return;
+    };
     let Ok(ctx) = contexts.ctx_mut() else { return };
+
     let egui_wants_input = ctx.wants_pointer_input() || ctx.wants_keyboard_input();
-    if let Ok(mut camera) = camera_q.single_mut() {
-        if camera.enabled == egui_wants_input {
-            camera.enabled = !egui_wants_input;
+    let is_dragging = !drag_state.dragged_entities.is_empty();
+
+    // The camera should be disabled if EITHER egui wants input OR we are dragging an atom.
+    let should_be_enabled = !(egui_wants_input || is_dragging);
+
+    if camera.enabled != should_be_enabled {
+        info!(
+            "Camera state changing. Current: {}, Target: {}. Egui Focus: {}, Is Dragging: {}",
+            camera.enabled, should_be_enabled, egui_wants_input, is_dragging
+        );
+        camera.enabled = should_be_enabled;
+    }
+}
+
+fn handle_drag_start(
+    mut events: EventReader<Pointer<DragStart>>,
+    mut drag_state: ResMut<DragState>,
+    mut commands: Commands,
+    selection: Res<SelectionState>,
+    camera_q: Query<(&Camera, &GlobalTransform)>,
+    atom_q: Query<&Transform, With<Atom>>,
+) {
+    let Ok((camera, camera_transform)) = camera_q.single() else {
+        return;
+    };
+
+    if let Some(event) = events.read().last() {
+        // Start a drag ONLY if the clicked entity is in the selection
+        // AND no drag is currently in progress.
+        if selection.selected.contains(&event.target) && drag_state.dragged_entities.is_empty() {
+            let positions: Vec<Vec3> = selection
+                .selected
+                .iter()
+                .filter_map(|e| atom_q.get(*e).ok().map(|t| t.translation))
+                .collect();
+
+            if positions.is_empty() {
+                return;
+            }
+
+            let centroid = positions.iter().sum::<Vec3>() / positions.len() as f32;
+            let drag_plane = InfinitePlane3d::new(camera_transform.forward());
+            let cursor_pos = event.pointer_location.position;
+            if let Ok(ray) = camera.viewport_to_world(camera_transform, cursor_pos) {
+                if let Some(_dist) = ray.intersect_plane(centroid, drag_plane) {
+                    *drag_state = DragState {
+                        dragged_entities: selection.selected.clone(),
+                        initial_positions: positions,
+                        initial_centroid: Some(centroid),
+                        plane: Some(drag_plane),
+                        target_centroid: Some(centroid),
+                    };
+                    for entity in &selection.selected {
+                        commands.entity(*entity).insert(Constraint {
+                            stiffness: 500_000.0,
+                        });
+                    }
+                    info!(
+                        "[DRAG LOG] Dragging selection of {} atoms.",
+                        selection.selected.len()
+                    );
+                }
+            }
+        }
+    }
+}
+
+fn handle_drag(
+    mut drag_state: ResMut<DragState>,
+    camera_q: Query<(&Camera, &GlobalTransform)>,
+    // This query is for the component on the pointer entity.
+    pointer_q: Query<&PointerLocation>,
+) {
+    if drag_state.dragged_entities.is_empty() {
+        return;
+    }
+
+    let Ok((camera, camera_transform)) = camera_q.single() else {
+        return;
+    };
+    if let (Some(initial_centroid), Some(drag_plane)) =
+        (drag_state.initial_centroid, drag_state.plane)
+    {
+        // Assume the first pointer is the one we care about.
+        if let Some(pointer_location_component) = pointer_q.iter().next() {
+            if let Some(location_struct) = &pointer_location_component.location {
+                let cursor_pos = location_struct.position;
+                if let Ok(ray) = camera.viewport_to_world(camera_transform, cursor_pos) {
+                    if let Some(dist) = ray.intersect_plane(initial_centroid, drag_plane) {
+                        drag_state.target_centroid = Some(ray.get_point(dist));
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn handle_drag_end(
+    mut events: EventReader<Pointer<DragEnd>>,
+    mut drag_state: ResMut<DragState>,
+    mut commands: Commands,
+) {
+    // Check if a drag is active. An end event can fire from anywhere.
+    if !drag_state.dragged_entities.is_empty() {
+        // We don't need to read the event, just know that one occurred.
+        if !events.is_empty() {
+            events.clear(); // Consume all end events for this frame.
+            info!("[DRAG LOG] Drag ended. Clearing constraints.");
+            for entity in &drag_state.dragged_entities {
+                commands.entity(*entity).remove::<Constraint>();
+            }
+            *drag_state = DragState::default();
         }
     }
 }

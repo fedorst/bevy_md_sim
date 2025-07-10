@@ -13,6 +13,11 @@ pub struct Force {
     pub non_bonded: Vec3,
 }
 
+#[derive(Component)]
+pub struct Constraint {
+    pub stiffness: f32,
+}
+
 impl Force {
     pub fn total_magnitude(&self) -> f32 {
         self.total.length()

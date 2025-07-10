@@ -59,6 +59,15 @@ pub struct SharedAssetHandles {
 #[derive(Resource, Default, Deref, DerefMut)]
 pub struct StepCount(pub u32);
 
+#[derive(Resource, Default)]
+pub struct DragState {
+    pub dragged_entities: Vec<Entity>,
+    pub initial_positions: Vec<Vec3>,
+    pub initial_centroid: Option<Vec3>,
+    pub plane: Option<InfinitePlane3d>,
+    pub target_centroid: Option<Vec3>,
+}
+
 #[derive(Resource, Default, Debug, Clone, Copy)]
 pub struct SystemEnergy {
     pub potential: f32,
