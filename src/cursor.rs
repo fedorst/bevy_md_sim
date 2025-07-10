@@ -1,15 +1,14 @@
 // src/cursor.rs
 
 use crate::components::Atom;
-use crate::cursor;
 use crate::interaction::SelectionState;
 use crate::resources::DragState;
 use bevy::prelude::*;
 use bevy::winit::cursor::CursorIcon;
 use bevy_egui::EguiContexts;
 use bevy_picking::hover::PickingInteraction;
-
 // An enum to represent the logical state of the cursor.
+//
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Default, States, Hash)]
 enum CursorState {
     #[default]
@@ -17,6 +16,11 @@ enum CursorState {
     Hover,
     Dragging,
     Draggable,
+    Text,
+    ResizeEW, // East-West
+    ResizeNS, // North-South
+    ResizeNESW,
+    ResizeNWSE,
 }
 
 pub struct CustomCursorPlugin;
@@ -45,6 +49,11 @@ struct CursorIcons {
     hover: CursorIcon,
     dragging: CursorIcon,
     draggable: CursorIcon,
+    text: CursorIcon,
+    resize_ew: CursorIcon,
+    resize_ns: CursorIcon,
+    resize_nesw: CursorIcon,
+    resize_nwse: CursorIcon,
 }
 
 #[derive(Resource)]
@@ -53,14 +62,25 @@ struct CursorAssetHandles {
     hover: Handle<Image>,
     dragging: Handle<Image>,
     draggable: Handle<Image>,
+    text: Handle<Image>,
+    resize_ew: Handle<Image>,
+    resize_ns: Handle<Image>,
+    resize_nesw: Handle<Image>,
+    resize_nwse: Handle<Image>,
 }
 
 fn load_cursor_assets(mut commands: Commands, asset_server: Res<AssetServer>) {
+    info!("[Cursor] Starting to load cursor image assets...");
     commands.insert_resource(CursorAssetHandles {
         default: asset_server.load("cursors/pointer_b.png"),
         hover: asset_server.load("cursors/pointer_c.png"),
         dragging: asset_server.load("cursors/hand_closed.png"),
         draggable: asset_server.load("cursors/hand_open.png"),
+        text: asset_server.load("cursors/bracket_a_vertical.png"),
+        resize_ew: asset_server.load("cursors/resize_a_horizontal.png"),
+        resize_ns: asset_server.load("cursors/resize_a_vertical.png"),
+        resize_nesw: asset_server.load("cursors/resize_a_diagonal.png"),
+        resize_nwse: asset_server.load("cursors/resize_a_diagonal_mirror.png"),
     });
 }
 
@@ -69,22 +89,48 @@ fn create_resized_cursors(
     handles: Res<CursorAssetHandles>,
     mut images: ResMut<Assets<Image>>,
 ) {
-    if let (Some(default_img), Some(hover_img), Some(dragging_img), Some(draggable_img)) = (
+    // waiting until https://github.com/bevyengine/bevy/issues/17276 is done, for now manual resize
+    if let (
+        Some(default_img),
+        Some(hover_img),
+        Some(dragging_img),
+        Some(draggable_img),
+        Some(text_img),
+        Some(resize_ew_img),
+        Some(resize_ns_img),
+        Some(resize_nesw_img),
+        Some(resize_nwse_img),
+    ) = (
         images.get(&handles.default),
         images.get(&handles.hover),
         images.get(&handles.dragging),
         images.get(&handles.draggable),
+        images.get(&handles.text),
+        images.get(&handles.resize_ew),
+        images.get(&handles.resize_ns),
+        images.get(&handles.resize_nesw),
+        images.get(&handles.resize_nwse),
     ) {
         // Resize images and create new handles
         let default_resized = resize_image(default_img, 32, 32);
         let hover_resized = resize_image(hover_img, 32, 32);
         let dragging_resized = resize_image(dragging_img, 32, 32);
         let draggable_resized = resize_image(draggable_img, 32, 32);
+        let text_resized = resize_image(text_img, 32, 32);
+        let resize_ew_resized = resize_image(resize_ew_img, 32, 32);
+        let resize_ns_resized = resize_image(resize_ns_img, 32, 32);
+        let resize_nesw_resized = resize_image(resize_nesw_img, 32, 32);
+        let resize_nwse_resized = resize_image(resize_nwse_img, 32, 32);
 
         let default_handle = images.add(default_resized);
         let hover_handle = images.add(hover_resized);
         let dragging_handle = images.add(dragging_resized);
         let draggable_handle = images.add(draggable_resized);
+        let text_handle = images.add(text_resized);
+        let resize_ew_handle = images.add(resize_ew_resized);
+        let resize_ns_handle = images.add(resize_ns_resized);
+        let resize_nesw_handle = images.add(resize_nesw_resized);
+        let resize_nwse_handle = images.add(resize_nwse_resized);
 
         // Create cursor icons
         let default_cursor = CursorIcon::Custom(bevy::winit::cursor::CustomCursor::Image(
@@ -131,11 +177,72 @@ fn create_resized_cursors(
             },
         ));
 
+        let text_cursor = CursorIcon::Custom(bevy::winit::cursor::CustomCursor::Image(
+            bevy::winit::cursor::CustomCursorImage {
+                handle: text_handle,
+                texture_atlas: None,
+                flip_x: false,
+                flip_y: false,
+                rect: None,
+                hotspot: (0, 0),
+            },
+        ));
+
+        let resize_ew_cursor = CursorIcon::Custom(bevy::winit::cursor::CustomCursor::Image(
+            bevy::winit::cursor::CustomCursorImage {
+                handle: resize_ew_handle,
+                texture_atlas: None,
+                flip_x: false,
+                flip_y: false,
+                rect: None,
+                hotspot: (0, 0),
+            },
+        ));
+
+        let resize_ns_cursor = CursorIcon::Custom(bevy::winit::cursor::CustomCursor::Image(
+            bevy::winit::cursor::CustomCursorImage {
+                handle: resize_ns_handle,
+                texture_atlas: None,
+                flip_x: false,
+                flip_y: false,
+                rect: None,
+                hotspot: (0, 0),
+            },
+        ));
+
+        let resize_nesw_cursor = CursorIcon::Custom(bevy::winit::cursor::CustomCursor::Image(
+            bevy::winit::cursor::CustomCursorImage {
+                handle: resize_nesw_handle,
+                texture_atlas: None,
+                flip_x: false,
+                flip_y: false,
+                rect: None,
+                hotspot: (0, 0),
+            },
+        ));
+        let resize_nwse_cursor = CursorIcon::Custom(bevy::winit::cursor::CustomCursor::Image(
+            bevy::winit::cursor::CustomCursorImage {
+                handle: resize_nwse_handle,
+                texture_atlas: None,
+                flip_x: false,
+                flip_y: false,
+                rect: None,
+                hotspot: (0, 0),
+            },
+        ));
+
+        // resize_ew_handle
+
         commands.insert_resource(CursorIcons {
             default: default_cursor,
             hover: hover_cursor,
             dragging: dragging_cursor,
             draggable: draggable_cursor,
+            text: text_cursor,
+            resize_ew: resize_ew_cursor,
+            resize_ns: resize_ns_cursor,
+            resize_nesw: resize_nesw_cursor,
+            resize_nwse: resize_nwse_cursor,
         });
 
         commands.remove_resource::<CursorAssetHandles>();
@@ -179,60 +286,6 @@ fn resize_image(image: &Image, new_width: u32, new_height: u32) -> Image {
     new_image.texture_descriptor.size.height = new_height;
 
     new_image
-}
-
-fn setup_cursor_icons(mut commands: Commands, asset_server: Res<AssetServer>) {
-    // All custom cursors using images
-    let default_cursor = CursorIcon::Custom(bevy::winit::cursor::CustomCursor::Image(
-        bevy::winit::cursor::CustomCursorImage {
-            handle: asset_server.load("cursors/pointer_b.png"),
-            texture_atlas: None,
-            flip_x: false,
-            flip_y: false,
-            rect: None,
-            hotspot: (0, 0), // Adjust based on your image
-        },
-    ));
-
-    let hover_cursor = CursorIcon::Custom(bevy::winit::cursor::CustomCursor::Image(
-        bevy::winit::cursor::CustomCursorImage {
-            handle: asset_server.load("cursors/pointer_c.png"),
-            texture_atlas: None,
-            flip_x: false,
-            flip_y: false,
-            rect: None,
-            hotspot: (0, 0), // Adjust based on your image
-        },
-    ));
-
-    let draggable_cursor = CursorIcon::Custom(bevy::winit::cursor::CustomCursor::Image(
-        bevy::winit::cursor::CustomCursorImage {
-            handle: asset_server.load("cursors/hand_open.png"),
-            texture_atlas: None,
-            flip_x: false,
-            flip_y: false,
-            rect: None,
-            hotspot: (0, 0), // Adjust based on your image
-        },
-    ));
-
-    let dragging_cursor = CursorIcon::Custom(bevy::winit::cursor::CustomCursor::Image(
-        bevy::winit::cursor::CustomCursorImage {
-            handle: asset_server.load("cursors/hand_closed.png"),
-            texture_atlas: None,
-            flip_x: false,
-            flip_y: false,
-            rect: None,
-            hotspot: (0, 0), // Adjust based on your image
-        },
-    ));
-
-    commands.insert_resource(CursorIcons {
-        default: default_cursor,
-        hover: hover_cursor,
-        dragging: dragging_cursor,
-        draggable: draggable_cursor,
-    });
 }
 
 /// This system determines what the cursor's state SHOULD be.
@@ -313,6 +366,11 @@ fn apply_cursor_icon(
         CursorState::Hover => &cursor_icons.hover,
         CursorState::Dragging => &cursor_icons.dragging,
         CursorState::Draggable => &cursor_icons.draggable,
+        CursorState::Text => &cursor_icons.text,
+        CursorState::ResizeEW => &cursor_icons.resize_ew,
+        CursorState::ResizeNS => &cursor_icons.resize_ns,
+        CursorState::ResizeNESW => &cursor_icons.resize_nesw,
+        CursorState::ResizeNWSE => &cursor_icons.resize_nwse,
     };
 
     commands.entity(window_entity).insert(new_cursor.clone());
