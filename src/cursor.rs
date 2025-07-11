@@ -7,8 +7,7 @@ use bevy::prelude::*;
 use bevy::winit::cursor::CursorIcon;
 use bevy_egui::EguiContexts;
 use bevy_picking::hover::PickingInteraction;
-// An enum to represent the logical state of the cursor.
-//
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Default, States, Hash)]
 enum CursorState {
     #[default]
@@ -16,6 +15,7 @@ enum CursorState {
     Hover,
     Dragging,
     Draggable,
+    // the rest is not in use until i figure out how to override egui pointer preferences
     Text,
     ResizeEW, // East-West
     ResizeNS, // North-South

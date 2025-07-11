@@ -1,8 +1,9 @@
 use crate::components::{Atom, BondVisualization, Constraint, Force, Velocity};
-use crate::resources::DragState;
 use crate::resources::{
-    Angle, Bond, BondOrder, ForceField, SharedAssetHandles, SystemConnectivity,
+    Angle, Bond, BondOrder, DragState, ForceField, LastClick, SharedAssetHandles,
+    SystemConnectivity,
 };
+
 use crate::simulation::PhysicsSet;
 use crate::visualization::VisualizationSet;
 use bevy::color::palettes::basic::{BLACK, BLUE, RED};
@@ -17,9 +18,14 @@ use bevy_picking::{
     pointer::PointerLocation,
     prelude::{Drag, DragEnd, DragStart, MeshPickingPlugin},
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::time::Duration;
+
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct InteractionSet;
+
+#[derive(Event, Debug)]
+pub struct DoubleClickOnAtom(pub Entity);
 
 #[derive(Event, Debug)]
 pub struct RebuildConnectivityEvent;
@@ -30,6 +36,7 @@ impl Plugin for InteractionPlugin {
     fn build(&self, app: &mut App) {
         app.configure_sets(Update, VisualizationSet.after(InteractionSet))
             .add_event::<RebuildConnectivityEvent>()
+            .add_event::<DoubleClickOnAtom>()
             .add_plugins(MeshPickingPlugin)
             .init_resource::<DragState>()
             .add_event::<Pointer<DragStart>>()
@@ -37,6 +44,7 @@ impl Plugin for InteractionPlugin {
             .add_event::<Pointer<DragEnd>>()
             .init_resource::<SelectionState>()
             .add_observer(handle_selection)
+            .add_systems(PostUpdate, select_molecule_on_double_click)
             .add_systems(
                 Update,
                 (
@@ -348,6 +356,9 @@ fn handle_selection(
     atoms: Query<&Atom>,
     keys: Res<ButtonInput<KeyCode>>,
     mut contexts: EguiContexts,
+    time: Res<Time>,
+    mut last_click: ResMut<LastClick>,
+    mut double_click_writer: EventWriter<DoubleClickOnAtom>,
 ) {
     let Ok(ctx) = contexts.ctx_mut() else { return };
     if ctx.wants_pointer_input() {
@@ -355,27 +366,95 @@ fn handle_selection(
     }
     let target = trigger.target();
     if atoms.get(target).is_ok() {
-        let shift_pressed = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
-        if shift_pressed {
-            if let Some(index) = selection.selected.iter().position(|&e| e == target) {
-                selection.selected.remove(index);
-                info!("Deselected {:?} from multi-select.", target);
-            } else {
-                selection.selected.push(target);
-                info!("Added {:?} to multi-select.", target);
+        const DOUBLE_CLICK_MAX_DELAY: Duration = Duration::from_millis(300);
+        let current_time = time.elapsed();
+        let mut is_double_click = false;
+
+        if let (Some(last_time), Some(last_target)) = (last_click.time, last_click.target) {
+            if last_target == target && (current_time - last_time) < DOUBLE_CLICK_MAX_DELAY {
+                info!("Double-click detected on {:?}", target);
+                double_click_writer.write(DoubleClickOnAtom(target));
+                is_double_click = true;
+                *last_click = LastClick::default();
             }
-        } else {
-            if selection.selected.len() == 1 && selection.selected[0] == target {
-                selection.selected.clear();
-                info!("Deselected all.");
+        }
+
+        if !is_double_click {
+            last_click.time = Some(current_time);
+            last_click.target = Some(target);
+        }
+
+        if !is_double_click {
+            let shift_pressed =
+                keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
+            if shift_pressed {
+                if let Some(index) = selection.selected.iter().position(|&e| e == target) {
+                    selection.selected.remove(index);
+                    info!("Deselected {:?} from multi-select.", target);
+                } else {
+                    selection.selected.push(target);
+                    info!("Added {:?} to multi-select.", target);
+                }
             } else {
-                selection.selected.clear();
-                selection.selected.push(target);
-                info!("Selected only {:?}.", target);
+                if !selection.selected.is_empty()
+                    && selection.selected.len() == 1
+                    && selection.selected[0] == target
+                {
+                    selection.selected.clear();
+                    info!("Deselected all.");
+                } else {
+                    selection.selected.clear();
+                    selection.selected.push(target);
+                    info!("Selected only {:?}.", target);
+                }
             }
         }
     }
 }
+
+fn select_molecule_on_double_click(
+    mut events: EventReader<DoubleClickOnAtom>,
+    mut selection: ResMut<SelectionState>,
+    connectivity: Res<SystemConnectivity>,
+) {
+    for event in events.read() {
+        let start_atom = event.0;
+        info!("Performing graph traversal starting from {:?}", start_atom);
+
+        selection.selected.clear();
+        let mut visited = HashSet::new();
+        let mut queue = VecDeque::new();
+
+        queue.push_back(start_atom);
+        visited.insert(start_atom);
+
+        while let Some(current_atom) = queue.pop_front() {
+            selection.selected.push(current_atom);
+
+            for bond in &connectivity.bonds {
+                let neighbor = if bond.a == current_atom {
+                    Some(bond.b)
+                } else if bond.b == current_atom {
+                    Some(bond.a)
+                } else {
+                    None
+                };
+
+                if let Some(neighbor_entity) = neighbor {
+                    if !visited.contains(&neighbor_entity) {
+                        visited.insert(neighbor_entity);
+                        queue.push_back(neighbor_entity);
+                    }
+                }
+            }
+        }
+        info!(
+            "Selected {} atoms in the molecule.",
+            selection.selected.len()
+        );
+    }
+}
+
 fn delete_selected_atom(
     mut commands: Commands,
     keys: Res<ButtonInput<KeyCode>>,

@@ -265,7 +265,7 @@ fn calculate_kinetic_energy(
     mut energy: ResMut<SystemEnergy>,
     query: Query<(&Atom, &Velocity)>,
     force_field: Res<ForceField>,
-    mut step_count: ResMut<StepCount>,
+    step_count: ResMut<StepCount>,
     mut history: ResMut<EnergyHistory>,
 ) {
     let mut kinetic_energy = 0.0;

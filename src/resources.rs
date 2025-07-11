@@ -2,6 +2,13 @@ use bevy::prelude::*;
 use serde::Deserialize;
 use std::collections::VecDeque;
 use std::collections::{HashMap, HashSet};
+use std::time::Duration;
+
+#[derive(Resource, Default)]
+pub struct LastClick {
+    pub time: Option<Duration>,
+    pub target: Option<Entity>,
+}
 
 #[derive(Resource)]
 pub struct EnergyHistory {

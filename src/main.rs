@@ -70,6 +70,7 @@ impl Plugin for CorePlugin {
             .init_resource::<EnergyHistory>()
             .init_resource::<CurrentTemperature>()
             .init_resource::<AtomIdMap>()
+            .init_resource::<LastClick>()
             .init_resource::<ExcludedPairs>()
             .add_systems(Update, track_active_wall_time);
     }

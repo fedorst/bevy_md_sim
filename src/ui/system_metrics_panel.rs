@@ -19,9 +19,6 @@ fn system_metrics_panel_egui_system(mut contexts: EguiContexts, history: Res<Ene
     };
 
     egui::Window::new("System Metrics")
-        // THE FIX: Change the anchor offset.
-        // The "Selection Info" panel has a width of 250. We add some padding.
-        // This places the metrics panel to the right of the info panel.
         .anchor(egui::Align2::LEFT_CENTER, egui::vec2(10.0, 40.0))
         .default_width(350.0)
         .default_height(200.0)
