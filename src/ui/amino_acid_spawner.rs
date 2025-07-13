@@ -5,9 +5,9 @@ use crate::spawning::SpawnMoleculeFromSMILESEvent;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
-pub struct PeptideBuilderPlugin;
+pub struct AminoAcidSpawnerPlugin;
 
-impl Plugin for PeptideBuilderPlugin {
+impl Plugin for AminoAcidSpawnerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup_amino_acid_info)
             .add_systems(EguiPrimaryContextPass, amino_acid_spawner_egui_system);

@@ -1,22 +1,22 @@
 // src/ui/mod.rs
 
+pub mod amino_acid_spawner;
 mod force_inspector;
 mod help_panel;
 mod hud;
 mod info_panel;
 mod pause_menu;
-pub mod peptide_builder;
 mod system_metrics_panel;
 
 use crate::AppState;
 use crate::interaction::InteractionSet;
+use amino_acid_spawner::AminoAcidSpawnerPlugin;
 use bevy::prelude::*;
 use force_inspector::ForceInspectorPlugin;
 use help_panel::HelpPanelPlugin;
 use hud::HudPlugin;
 use info_panel::InfoPanelPlugin;
 use pause_menu::PauseMenuPlugin;
-use peptide_builder::PeptideBuilderPlugin;
 use system_metrics_panel::SystemMetricsPanelPlugin;
 // This set can be used if any UI systems need to be ordered relative to each other.
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
@@ -34,7 +34,7 @@ impl Plugin for UIPlugin {
                 PauseMenuPlugin,
                 ForceInspectorPlugin,
                 SystemMetricsPanelPlugin,
-                PeptideBuilderPlugin,
+                AminoAcidSpawnerPlugin,
             ))
             // Keep global UI controls here
             .add_systems(Update, (handle_simulation_control).in_set(UiSet));
