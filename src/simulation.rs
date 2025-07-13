@@ -1,6 +1,8 @@
+use crate::AppState;
 use crate::components::{Acceleration, Atom, Constraint, Force, Velocity};
 use crate::resources::*;
 use bevy::prelude::*;
+
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PhysicsSet;
 
@@ -22,15 +24,18 @@ impl Plugin for SimulationPlugin {
                 finish_velocity_update,
                 apply_thermostat,
                 calculate_kinetic_energy,
+                increment_step_count,
                 end_simulation_step,
             )
                 .chain()
                 .in_set(PhysicsSet)
-                .run_if(|state: Res<SimulationState>, step: Res<StepSimulation>| {
-                    !state.paused || step.0
-                }),
+                .run_if(in_state(AppState::Running)),
         );
     }
+}
+
+fn increment_step_count(mut step_count: ResMut<StepCount>) {
+    step_count.0 += 1;
 }
 
 fn calculate_dihedral_forces(
@@ -152,9 +157,8 @@ fn apply_thermostat(
     }
 }
 
-fn end_simulation_step(mut step: ResMut<StepSimulation>, mut step_count: ResMut<StepCount>) {
+fn end_simulation_step(mut step_count: ResMut<StepCount>) {
     step_count.0 += 1;
-    step.0 = false;
     // info!("Advanced to step {}", step_count.0);
 }
 
@@ -207,6 +211,7 @@ fn calculate_non_bonded_forces(
             continue;
         }
         let vec = transform2.translation() - transform1.translation();
+
         let r_sq = vec.length_squared();
         if r_sq < 1e-6 {
             continue;
@@ -363,6 +368,7 @@ fn calculate_bond_and_constraint_forces(
                 bond.order,
             )) {
                 let vec = t2.translation - t1.translation;
+
                 let r = vec.length();
                 let force_magnitude = -bond_k * (r - bond_r0);
                 let force_vec = vec.normalize_or_zero() * force_magnitude;

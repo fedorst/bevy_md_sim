@@ -46,24 +46,7 @@ fn setup_shared_assets(
     });
 }
 
-fn trigger_initial_molecule_spawn(
-    mut spawn_writer: EventWriter<SpawnMoleculeFromSMILESEvent>,
-    molecule_selection: Res<MoleculeSelection>,
-) {
-    let smiles = match molecule_selection.0.as_str() {
-        "ethanol" => "CCO",
-        "water" => "O",
-        "alanine" => "C[C@H](N)C(=O)O",
-        "glycine" => "NCC(=O)O",
-        "acetaldehyde" => "CC=O",
-        "arginine" => "N[C@@H](CCCNC(N)=N)C(O)=O",
-        "phenylalanine" => "N[C@@H](CC1=CC=CC=C1)C(=O)O",
-        "methylamine" => "CN",
-        _ => "CCO", // Default to ethanol
-    };
-    info!(
-        "Sending initial spawn event for '{}' with SMILES: {}",
-        molecule_selection.0, smiles
-    );
-    spawn_writer.write(SpawnMoleculeFromSMILESEvent(smiles.to_string()));
+fn trigger_initial_molecule_spawn(mut spawn_writer: EventWriter<SpawnMoleculeFromSMILESEvent>) {
+    info!("Sending initial spawn event for a single ethanol molecule.");
+    spawn_writer.write(SpawnMoleculeFromSMILESEvent("CCO".to_string(), None));
 }

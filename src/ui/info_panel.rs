@@ -82,7 +82,11 @@ fn display_single_atom_info(
     atom_query: &Query<(&Atom, &Transform, &Velocity, &Force)>,
 ) -> String {
     if let Ok((atom, _transform, velocity, force)) = atom_query.get(entity) {
-        let pretty_id = atom_id_map.entity_to_id.get(&entity).unwrap();
+        let pretty_id = atom_id_map
+            .entity_to_id
+            .get(&entity)
+            .cloned()
+            .unwrap_or_else(|| "Solvent Atom".to_string());
         format!(
             "Selected: {}\n\
              Type: {}\n\

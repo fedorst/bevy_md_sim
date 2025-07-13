@@ -1,12 +1,10 @@
 // src/spawning.rs
 
 use crate::components::*;
+use crate::components::{Molecule, Solvent};
 use crate::config::MoleculeConfig;
 use crate::interaction::RebuildConnectivityEvent;
-use crate::resources::{
-    Angle, AtomIdMap, Bond, BondOrder, Dihedral, ExcludedPairs, ForceField, SharedAssetHandles,
-    SystemConnectivity,
-};
+use crate::resources::{AtomIdMap, Bond, BondOrder, SimulationBox, SystemConnectivity};
 use bevy::prelude::*;
 use bevy::tasks::{AsyncComputeTaskPool, Task};
 use futures_lite::future;
@@ -14,7 +12,13 @@ use std::collections::{HashMap, HashSet};
 
 /// An event sent to request a new molecule from a SMILES string.
 #[derive(Event, Debug)]
-pub struct SpawnMoleculeFromSMILESEvent(pub String);
+pub struct SpawnMoleculeFromSMILESEvent(pub String, pub Option<IVec3>);
+
+#[derive(Event, Debug)]
+pub struct SpawnSolventEvent;
+
+#[derive(Event, Debug)]
+pub struct DespawnSolventEvent;
 
 #[derive(Event, Debug)]
 pub struct ValidateSMILESEvent(pub String);
@@ -24,11 +28,7 @@ pub struct SMILESValidationResult(pub Result<(), String>);
 
 /// An event sent when the python script succeeds, containing the molecule JSON.
 #[derive(Event, Debug)]
-struct SpawnMoleculeFromJsonEvent(String);
-
-/// A component to mark the container entity for all atoms and bonds of a molecule.
-#[derive(Component)]
-pub struct MoleculeContainer;
+struct SpawnMoleculeFromJsonEvent(String, Option<IVec3>);
 
 #[derive(Component)]
 struct ValidationTask(Option<Task<SMILESValidationResult>>);
@@ -37,7 +37,9 @@ pub struct SpawningPlugin;
 
 impl Plugin for SpawningPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<SpawnMoleculeFromSMILESEvent>()
+        app.add_event::<SpawnSolventEvent>()
+            .add_event::<DespawnSolventEvent>()
+            .add_event::<SpawnMoleculeFromSMILESEvent>()
             .add_event::<ValidateSMILESEvent>()
             .add_event::<SMILESValidationResult>()
             .add_event::<SpawnMoleculeFromJsonEvent>()
@@ -46,18 +48,166 @@ impl Plugin for SpawningPlugin {
                 (
                     trigger_smiles_validation,
                     handle_validation_result,
-                    trigger_molecule_generation_on_enter,
+                    trigger_molecule_generation,
                     (
                         despawn_previous_molecule,
                         ApplyDeferred,
-                        spawn_new_molecule,
-                        build_derived_connectivity,
+                        spawn_molecules_from_json,
                     )
                         .chain()
                         .run_if(on_event::<SpawnMoleculeFromJsonEvent>),
+                    handle_spawn_solvent_event.run_if(on_event::<SpawnSolventEvent>),
+                    handle_despawn_solvent_event.run_if(on_event::<DespawnSolventEvent>),
                 ),
             );
     }
+}
+
+fn handle_spawn_solvent_event(
+    mut commands: Commands,
+    mut events: EventReader<SpawnSolventEvent>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut connectivity: ResMut<SystemConnectivity>,
+    mut rebuild_writer: EventWriter<RebuildConnectivityEvent>,
+    sim_box_opt: Option<Res<SimulationBox>>,
+    existing_atoms: Query<&Transform, With<Atom>>,
+) {
+    if events.read().last().is_none() {
+        return;
+    }
+    let Some(sim_box) = sim_box_opt else {
+        warn!("Cannot spawn solvent, no SimulationBox resource found.");
+        return;
+    };
+    let output = match std::process::Command::new("python")
+        .arg("auto_typer.py")
+        .arg("--smiles")
+        .arg("O")
+        .output()
+    {
+        Ok(out) if out.status.success() => out,
+        _ => {
+            error!("Solvent generation script failed");
+            return;
+        }
+    };
+    let Ok(config) = serde_json::from_slice::<MoleculeConfig>(&output.stdout) else {
+        return;
+    };
+    info!("Spawning solvent...");
+    let grid_density = 5;
+    let spacing = sim_box.size / grid_density as f32;
+    let grid_offset = -(sim_box.size / 2.0) + (spacing / 2.0);
+    let overlap_cutoff_sq = 0.3 * 0.3;
+
+    let mut all_atom_positions: Vec<Vec3> = existing_atoms.iter().map(|t| t.translation).collect();
+
+    for z in 0..grid_density {
+        for y in 0..grid_density {
+            for x in 0..grid_density {
+                let molecule_offset =
+                    Vec3::new(x as f32, y as f32, z as f32) * spacing + grid_offset;
+                let is_overlapping = all_atom_positions
+                    .iter()
+                    .any(|pos| molecule_offset.distance_squared(*pos) < overlap_cutoff_sq);
+
+                if !is_overlapping {
+                    let mut id_to_entity_map = HashMap::new();
+                    let mut spawned_atom_positions = Vec::new();
+                    commands
+                        .spawn((
+                            Molecule,
+                            Solvent,
+                            (
+                                Transform::default(),
+                                GlobalTransform::default(),
+                                Visibility::default(),
+                                InheritedVisibility::default(),
+                                ViewVisibility::default(),
+                            ),
+                        ))
+                        .with_children(|parent| {
+                            for atom_spec in &config.atoms {
+                                let pos = Vec3::from(atom_spec.pos) + molecule_offset;
+                                spawned_atom_positions.push(pos);
+                                let radius = match atom_spec.element.as_str() {
+                                    "O" => 0.05,
+                                    "H" => 0.03,
+                                    _ => 0.045,
+                                };
+                                let color = match atom_spec.element.as_str() {
+                                    "O" => Color::srgb(1.0, 0.1, 0.1),
+                                    "H" => Color::srgb(0.9, 0.9, 0.9),
+                                    _ => Color::srgb(1.0, 0.2, 0.8),
+                                };
+                                let entity = parent
+                                    .spawn((
+                                        Atom {
+                                            type_name: atom_spec.type_name.clone(),
+                                        },
+                                        Solvent,
+                                        Force::default(),
+                                        Velocity(Vec3::ZERO),
+                                        Acceleration(Vec3::ZERO),
+                                        Mesh3d(meshes.add(Sphere::new(radius))),
+                                        MeshMaterial3d(materials.add(color)),
+                                        Transform::from_translation(pos),
+                                    ))
+                                    .id();
+                                id_to_entity_map.insert(atom_spec.id.clone(), entity);
+                            }
+                        });
+                    all_atom_positions.extend(spawned_atom_positions);
+                    for bond_spec in &config.bonds {
+                        let entity1 = id_to_entity_map[&bond_spec.atoms[0]];
+                        let entity2 = id_to_entity_map[&bond_spec.atoms[1]];
+                        connectivity.bonds.push(Bond {
+                            a: entity1,
+                            b: entity2,
+                            order: BondOrder::Single,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    rebuild_writer.write(RebuildConnectivityEvent);
+}
+
+fn handle_despawn_solvent_event(
+    mut commands: Commands,
+    mut events: EventReader<DespawnSolventEvent>,
+    mut connectivity: ResMut<SystemConnectivity>,
+    mut rebuild_writer: EventWriter<RebuildConnectivityEvent>,
+    // Query for parent Molecule entities that are solvents
+    solvent_molecule_query: Query<Entity, (With<Molecule>, With<Solvent>)>,
+    // Query for child Atom entities that are solvents
+    solvent_atom_query: Query<Entity, (With<Atom>, With<Solvent>)>,
+) {
+    if events.read().last().is_none() {
+        return;
+    }
+
+    info!("Despawning solvent...");
+    let solvent_atoms: HashSet<Entity> = solvent_atom_query.iter().collect();
+
+    if solvent_atoms.is_empty() {
+        return;
+    }
+
+    // 1. Remove all bonds connected to any solvent atom.
+    connectivity
+        .bonds
+        .retain(|bond| !solvent_atoms.contains(&bond.a) && !solvent_atoms.contains(&bond.b));
+
+    // 2. Despawn all solvent molecule entities, which will despawn their child atoms.
+    for entity in &solvent_molecule_query {
+        commands.entity(entity).despawn();
+    }
+
+    // 3. Trigger a full rebuild of visuals and derived connectivity.
+    rebuild_writer.write(RebuildConnectivityEvent);
 }
 
 fn trigger_smiles_validation(
@@ -132,12 +282,13 @@ fn handle_validation_result(
 }
 
 // System 1: Listens for external requests and runs the Python script.
-fn trigger_molecule_generation_on_enter(
+fn trigger_molecule_generation(
     mut spawn_events: EventReader<SpawnMoleculeFromSMILESEvent>,
     mut writer: EventWriter<SpawnMoleculeFromJsonEvent>,
 ) {
     for event in spawn_events.read() {
         let smiles = &event.0;
+        let grid_info = event.1;
         info!("Received request to spawn molecule from SMILES: {}", smiles);
         let output = match std::process::Command::new("python")
             .arg("auto_typer.py")
@@ -154,6 +305,7 @@ fn trigger_molecule_generation_on_enter(
         if output.status.success() {
             writer.write(SpawnMoleculeFromJsonEvent(
                 String::from_utf8_lossy(&output.stdout).to_string(),
+                grid_info,
             ));
         } else {
             error!(
@@ -169,11 +321,10 @@ fn despawn_previous_molecule(
     mut commands: Commands,
     mut connectivity: ResMut<SystemConnectivity>,
     mut atom_id_map: ResMut<AtomIdMap>,
-    // Also despawn any existing bond visuals
     bond_vis_query: Query<Entity, With<BondVisualization>>,
-    molecule_container_query: Query<Entity, With<MoleculeContainer>>,
+    molecule_query: Query<Entity, With<Molecule>>,
 ) {
-    for entity in &molecule_container_query {
+    for entity in &molecule_query {
         commands.entity(entity).despawn();
     }
     for entity in &bond_vis_query {
@@ -184,16 +335,14 @@ fn despawn_previous_molecule(
 }
 
 // System 3: Spawns the new molecule from the generated JSON.
-fn spawn_new_molecule(
+fn spawn_molecules_from_json(
     mut events: EventReader<SpawnMoleculeFromJsonEvent>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut connectivity: ResMut<SystemConnectivity>,
     mut atom_id_map: ResMut<AtomIdMap>,
-    shared_handles: Res<SharedAssetHandles>,
-    force_field: Res<ForceField>,
-    atom_query: Query<&Atom>,
+    mut rebuild_writer: EventWriter<RebuildConnectivityEvent>,
 ) {
     for event in events.read() {
         let config: MoleculeConfig = match serde_json::from_str(&event.0) {
@@ -203,22 +352,30 @@ fn spawn_new_molecule(
                 continue;
             }
         };
+        let grid_size = event.1.unwrap_or(IVec3::ONE);
+        let spacing = if event.1.is_some() { 1.2 } else { 2.4 };
+        let box_size = if event.1.is_some() {
+            grid_size.as_vec3() * spacing
+        } else {
+            Vec3::splat(spacing)
+        };
+        commands.insert_resource(SimulationBox { size: box_size });
 
-        info!("Spawning new molecule: {}", config.name);
+        info!("Spawning {} molecule(s)...", config.name);
         let mut id_to_entity_map = HashMap::new();
-        // The container needs the full set of visibility components to be a valid parent.
         let molecule_entity = commands
             .spawn((
-                MoleculeContainer,
+                Molecule,
                 Name::new(config.name.clone()),
-                Transform::default(),
-                GlobalTransform::default(),
-                Visibility::default(),
-                InheritedVisibility::default(),
-                ViewVisibility::default(),
+                (
+                    Transform::default(),
+                    GlobalTransform::default(),
+                    Visibility::default(),
+                    InheritedVisibility::default(),
+                    ViewVisibility::default(),
+                ),
             ))
             .id();
-
         commands.entity(molecule_entity).with_children(|parent| {
             for atom_spec in &config.atoms {
                 let radius = match atom_spec.element.as_str() {
@@ -235,8 +392,6 @@ fn spawn_new_molecule(
                     "N" => Color::srgb(0.1, 0.1, 1.0),
                     _ => Color::srgb(1.0, 0.2, 0.8),
                 };
-
-                // Individual atoms do not need Inherited/View visibility if they are children
                 let entity = parent
                     .spawn((
                         Atom {
@@ -248,7 +403,6 @@ fn spawn_new_molecule(
                         Mesh3d(meshes.add(Sphere::new(radius))),
                         MeshMaterial3d(materials.add(color)),
                         Transform::from_translation(Vec3::from(atom_spec.pos)),
-                        GlobalTransform::default(),
                     ))
                     .id();
                 id_to_entity_map.insert(atom_spec.id.clone(), entity);
@@ -257,13 +411,12 @@ fn spawn_new_molecule(
                     .insert(entity, atom_spec.id.clone());
             }
         });
-
         for bond_spec in &config.bonds {
             let entity1 = id_to_entity_map[&bond_spec.atoms[0]];
             let entity2 = id_to_entity_map[&bond_spec.atoms[1]];
             let order = match bond_spec.order.as_str() {
                 "Double" => BondOrder::Double,
-                "Triple" => BondOrder::Triple, // You need to add this to the BondOrder enum
+                "Triple" => BondOrder::Triple,
                 _ => BondOrder::Single,
             };
             connectivity.bonds.push(Bond {
@@ -272,119 +425,6 @@ fn spawn_new_molecule(
                 order,
             });
         }
-
-        // Spawn bond visuals
-        for bond in &connectivity.bonds {
-            let Ok([atom1, atom2]) = atom_query.get_many([bond.a, bond.b]) else {
-                continue;
-            };
-            let key = (atom1.type_name.clone(), atom2.type_name.clone(), bond.order);
-
-            let material_handle = if force_field.bond_params.contains_key(&key) {
-                shared_handles.bond_material.clone()
-            } else {
-                warn!(
-                    "Found undefined bond between types: {} and {}",
-                    atom1.type_name, atom2.type_name
-                );
-                shared_handles.undefined_bond_material.clone()
-            };
-            let num_strands = match bond.order {
-                BondOrder::Single => 1,
-                BondOrder::Double => 2,
-                BondOrder::Triple => 3,
-            };
-            for i in 0..num_strands {
-                commands.spawn((
-                    Mesh3d(shared_handles.bond_mesh.clone()),
-                    // Use the material we just selected
-                    MeshMaterial3d(material_handle.clone()),
-                    Transform::default(),
-                    GlobalTransform::default(),
-                    BondVisualization {
-                        atom1: bond.a,
-                        atom2: bond.b,
-                        strand_index: i,
-                        total_strands: num_strands,
-                    },
-                ));
-            }
-        }
     }
-}
-
-// System 4: Builds angles, dihedrals, and exclusions after spawning.
-fn build_derived_connectivity(
-    mut commands: Commands,
-    mut connectivity: ResMut<SystemConnectivity>,
-    // This event from interaction.rs signals other systems that a full rebuild happened.
-    mut rebuild_writer: EventWriter<RebuildConnectivityEvent>,
-) {
-    // Only run if there are bonds to process.
-    if connectivity.bonds.is_empty() {
-        return;
-    }
-
-    info!("Building derived connectivity for new molecule...");
-    let mut adjacency: HashMap<Entity, Vec<Entity>> = HashMap::new();
-    for bond in &connectivity.bonds {
-        adjacency.entry(bond.a).or_default().push(bond.b);
-        adjacency.entry(bond.b).or_default().push(bond.a);
-    }
-
-    // `clone()` is needed here to satisfy the borrow checker, as we modify `connectivity` inside the loop.
-    for (center_atom, neighbors) in adjacency.clone() {
-        if neighbors.len() < 2 {
-            continue;
-        }
-        for i in 0..neighbors.len() {
-            for j in (i + 1)..neighbors.len() {
-                connectivity.angles.push(Angle {
-                    a: neighbors[i],
-                    center: center_atom,
-                    b: neighbors[j],
-                });
-            }
-        }
-    }
-
-    let mut new_dihedrals = Vec::new();
-    for bond1 in &connectivity.bonds {
-        for bond2 in &connectivity.bonds {
-            if bond1.b == bond2.a && bond1.a != bond2.b {
-                new_dihedrals.push(Dihedral {
-                    a: bond1.a,
-                    b: bond1.b,
-                    c: bond2.a,
-                    d: bond2.b,
-                });
-            }
-        }
-    }
-    connectivity.dihedrals.append(&mut new_dihedrals);
-
-    let mut one_two = HashSet::new();
-    for bond in &connectivity.bonds {
-        one_two.insert(if bond.a < bond.b {
-            (bond.a, bond.b)
-        } else {
-            (bond.b, bond.a)
-        });
-    }
-    let mut one_three = HashSet::new();
-    for angle in &connectivity.angles {
-        one_three.insert(if angle.a < angle.b {
-            (angle.a, angle.b)
-        } else {
-            (angle.b, angle.a)
-        });
-    }
-    commands.insert_resource(ExcludedPairs { one_two, one_three });
-
-    info!(
-        "Connectivity generation complete. Angles: {}, Dihedrals: {}",
-        connectivity.angles.len(),
-        connectivity.dihedrals.len()
-    );
     rebuild_writer.write(RebuildConnectivityEvent);
 }

@@ -5,6 +5,12 @@ pub struct Atom {
     pub type_name: String,
 }
 
+#[derive(Component)]
+pub struct Solvent;
+
+#[derive(Component)]
+pub struct Molecule;
+
 #[derive(Component, Default, Debug, Clone, Copy)]
 pub struct Force {
     pub total: Vec3,

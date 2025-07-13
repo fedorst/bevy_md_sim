@@ -7,8 +7,8 @@ mod info_panel;
 mod pause_menu;
 mod system_metrics_panel;
 
+use crate::AppState;
 use crate::interaction::InteractionSet;
-use crate::resources::{SimulationState, StepSimulation};
 use bevy::prelude::*;
 
 use force_inspector::ForceInspectorPlugin;
@@ -35,10 +35,7 @@ impl Plugin for UIPlugin {
                 SystemMetricsPanelPlugin,
             ))
             // Keep global UI controls here
-            .add_systems(
-                Update,
-                (handle_simulation_control, continuous_simulation).in_set(UiSet),
-            );
+            .add_systems(Update, (handle_simulation_control).in_set(UiSet));
     }
 }
 
@@ -46,23 +43,16 @@ impl Plugin for UIPlugin {
 // so they can live in the main `mod.rs`.
 
 fn handle_simulation_control(
-    mut sim_state: ResMut<SimulationState>,
-    mut step: ResMut<StepSimulation>,
+    app_state: Res<State<AppState>>,
+    mut next_state: ResMut<NextState<AppState>>,
     keys: Res<ButtonInput<KeyCode>>,
 ) {
-    // Space bar ONLY toggles the paused state of the simulation.
+    // Space bar toggles between Running and Paused.
     if keys.just_pressed(KeyCode::Space) {
-        sim_state.paused = !sim_state.paused;
-    }
-
-    // Right arrow still steps one frame when paused.
-    if sim_state.paused && keys.just_pressed(KeyCode::ArrowRight) {
-        step.0 = true;
-    }
-}
-
-fn continuous_simulation(mut step: ResMut<StepSimulation>, state: Res<SimulationState>) {
-    if !state.paused {
-        step.0 = true;
+        match app_state.get() {
+            AppState::Running => next_state.set(AppState::Paused),
+            AppState::Paused => next_state.set(AppState::Running),
+            _ => {} // Do nothing while initializing
+        }
     }
 }

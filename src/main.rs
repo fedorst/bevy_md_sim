@@ -14,7 +14,7 @@ use bevy_egui::EguiPlugin;
 use bevy_panorbit_camera::PanOrbitCameraPlugin;
 use clap::Parser;
 use cursor::CustomCursorPlugin;
-use interaction::InteractionPlugin;
+use interaction::{InteractionPlugin, RebuildConnectivityEvent};
 use resources::*;
 use setup::SetupPlugin;
 use simulation::SimulationPlugin;
@@ -22,7 +22,15 @@ use spawning::SpawningPlugin;
 use ui::UIPlugin;
 use visualization::VisualizationPlugin;
 
-#[derive(Parser, Debug)]
+#[derive(States, Debug, Clone, PartialEq, Eq, Hash, Default)]
+pub enum AppState {
+    #[default]
+    Initializing, // Start here to allow setup systems to run.
+    Running,
+    Paused,
+}
+
+#[derive(Resource, Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct CliArgs {
     /// The name of the molecule to load from the assets/molecules/{molecule}.json.
@@ -60,10 +68,8 @@ impl Plugin for CorePlugin {
         app.insert_resource(ForceField::from_file(&ff_path))
             .insert_resource::<ForceMultiplier>(ForceMultiplier(1.0))
             .init_resource::<SystemConnectivity>()
-            .init_resource::<StepSimulation>()
             .init_resource::<StepCount>()
             .init_resource::<PauseMenuState>()
-            .init_resource::<SimulationState>()
             .init_resource::<ActiveWallTime>()
             .init_resource::<ThermostatScale>()
             .init_resource::<SystemEnergy>()
@@ -71,17 +77,36 @@ impl Plugin for CorePlugin {
             .init_resource::<CurrentTemperature>()
             .init_resource::<AtomIdMap>()
             .init_resource::<LastClick>()
-            .init_resource::<ExcludedPairs>()
-            .add_systems(Update, track_active_wall_time);
+            .init_resource::<ExcludedPairs>();
+        // .add_systems(Update, track_active_wall_time);
+    }
+}
+
+fn check_initialization_complete(
+    mut commands: Commands,
+    cli: Res<CliArgs>,
+    // This system runs when a RebuildConnectivityEvent is sent, which is our signal that setup is done.
+    mut rebuild_reader: EventReader<RebuildConnectivityEvent>,
+    mut next_state: ResMut<NextState<AppState>>,
+) {
+    if rebuild_reader.read().last().is_some() {
+        info!("Initialization complete. Transitioning to target state.");
+        if cli.paused {
+            next_state.set(AppState::Paused);
+        } else {
+            next_state.set(AppState::Running);
+        }
+        // This system has done its job, so we despawn it.
+        commands.remove_resource::<CliArgs>();
     }
 }
 
 fn track_active_wall_time(
     time: Res<Time>,
-    sim_state: Res<SimulationState>,
+    app_state: Res<State<AppState>>,
     mut active_wall_time: ResMut<ActiveWallTime>,
 ) {
-    if !sim_state.paused {
+    if *app_state.get() == AppState::Running {
         active_wall_time.0 += time.delta_secs();
     }
 }
@@ -92,15 +117,13 @@ fn main() {
 
     App::new()
         .add_plugins(DefaultPlugins)
-        .insert_resource(MoleculeSelection(args.molecule))
+        .init_state::<AppState>()
         .insert_resource(SimulationParameters { dt: args.dt })
         .insert_resource(Thermostat {
             target_temperature: args.temp,
             tau: args.tau,
         })
-        .insert_resource(SimulationState {
-            paused: args.paused,
-        })
+        .insert_resource(args)
         .add_plugins((
             PanOrbitCameraPlugin,
             EguiPlugin::default(),
@@ -113,5 +136,12 @@ fn main() {
             SpawningPlugin,
             CustomCursorPlugin,
         ))
+        .add_systems(
+            Update,
+            (
+                check_initialization_complete.run_if(in_state(AppState::Initializing)),
+                track_active_wall_time,
+            ),
+        )
         .run();
 }

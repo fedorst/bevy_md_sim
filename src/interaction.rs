@@ -1,7 +1,7 @@
 use crate::components::{Atom, BondVisualization, Constraint, Force, Velocity};
 use crate::resources::{
-    Angle, Bond, BondOrder, DragState, ForceField, LastClick, SharedAssetHandles,
-    SystemConnectivity,
+    Angle, Bond, BondOrder, Dihedral, DragState, ExcludedPairs, ForceField, LastClick,
+    SharedAssetHandles, SystemConnectivity,
 };
 
 use crate::simulation::PhysicsSet;
@@ -45,6 +45,7 @@ impl Plugin for InteractionPlugin {
             .init_resource::<SelectionState>()
             .add_observer(handle_selection)
             .add_systems(PostUpdate, select_molecule_on_double_click)
+            .add_systems(PostUpdate, rebuild_connectivity_and_visuals_on_event)
             .add_systems(
                 Update,
                 (
@@ -57,7 +58,6 @@ impl Plugin for InteractionPlugin {
                         focus_camera_on_selection,
                     )
                         .run_if(not(egui_wants_any_keyboard_input)),
-                    rebuild_on_event,
                     update_highlights,
                     draw_selection_gizmos,
                 )
@@ -69,6 +69,111 @@ impl Plugin for InteractionPlugin {
                 control_camera_activity.before(PanOrbitCameraSystemSet),
             );
     }
+}
+
+fn rebuild_connectivity_and_visuals_on_event(
+    mut commands: Commands,
+    mut rebuild_reader: EventReader<RebuildConnectivityEvent>,
+    mut connectivity: ResMut<SystemConnectivity>,
+    force_field: Res<ForceField>,
+    shared_handles: Res<SharedAssetHandles>,
+    atom_query: Query<&Atom>,
+    bond_vis_query: Query<Entity, With<BondVisualization>>,
+) {
+    if rebuild_reader.read().last().is_none() {
+        return;
+    }
+
+    info!("Rebuilding connectivity and visuals...");
+    for entity in &bond_vis_query {
+        commands.entity(entity).despawn();
+    }
+    for bond in &connectivity.bonds {
+        let Ok([atom1, atom2]) = atom_query.get_many([bond.a, bond.b]) else {
+            continue;
+        };
+        let key = (atom1.type_name.clone(), atom2.type_name.clone(), bond.order);
+        let material_handle = if force_field.bond_params.contains_key(&key) {
+            shared_handles.bond_material.clone()
+        } else {
+            shared_handles.undefined_bond_material.clone()
+        };
+        let num_strands = match bond.order {
+            BondOrder::Single => 1,
+            BondOrder::Double => 2,
+            BondOrder::Triple => 3,
+        };
+        for i in 0..num_strands {
+            commands.spawn((
+                Mesh3d(shared_handles.bond_mesh.clone()),
+                MeshMaterial3d(material_handle.clone()),
+                Transform::default(),
+                BondVisualization {
+                    atom1: bond.a,
+                    atom2: bond.b,
+                    strand_index: i,
+                    total_strands: num_strands,
+                },
+            ));
+        }
+    }
+    let mut adjacency: HashMap<Entity, Vec<Entity>> = HashMap::new();
+    for bond in &connectivity.bonds {
+        adjacency.entry(bond.a).or_default().push(bond.b);
+        adjacency.entry(bond.b).or_default().push(bond.a);
+    }
+    connectivity.angles.clear();
+    for (center_atom, neighbors) in adjacency.clone() {
+        if neighbors.len() < 2 {
+            continue;
+        }
+        for i in 0..neighbors.len() {
+            for j in (i + 1)..neighbors.len() {
+                connectivity.angles.push(Angle {
+                    a: neighbors[i],
+                    center: center_atom,
+                    b: neighbors[j],
+                });
+            }
+        }
+    }
+    connectivity.dihedrals.clear();
+    let mut new_dihedrals = Vec::new();
+    for bond1 in &connectivity.bonds {
+        for bond2 in &connectivity.bonds {
+            if bond1.b == bond2.a && bond1.a != bond2.b {
+                new_dihedrals.push(Dihedral {
+                    a: bond1.a,
+                    b: bond1.b,
+                    c: bond2.a,
+                    d: bond2.b,
+                });
+            }
+        }
+    }
+    connectivity.dihedrals.append(&mut new_dihedrals);
+    let mut one_two = HashSet::new();
+    for bond in &connectivity.bonds {
+        one_two.insert(if bond.a < bond.b {
+            (bond.a, bond.b)
+        } else {
+            (bond.b, bond.a)
+        });
+    }
+    let mut one_three = HashSet::new();
+    for angle in &connectivity.angles {
+        one_three.insert(if angle.a < angle.b {
+            (angle.a, angle.b)
+        } else {
+            (angle.b, angle.a)
+        });
+    }
+    commands.insert_resource(ExcludedPairs { one_two, one_three });
+    info!(
+        "Connectivity and visuals rebuilt. Bonds: {}, Angles: {}",
+        connectivity.bonds.len(),
+        connectivity.angles.len()
+    );
 }
 
 fn control_camera_activity(
@@ -204,7 +309,6 @@ fn manage_bonds(
     mut connectivity: ResMut<SystemConnectivity>,
     force_field: Res<ForceField>,
     atom_query: Query<&Atom>,
-    // It now takes an EventWriter to signal that a rebuild is needed.
     mut rebuild_writer: EventWriter<RebuildConnectivityEvent>,
 ) {
     if keys.just_pressed(KeyCode::KeyB) && selection.selected.len() == 2 {
@@ -217,7 +321,6 @@ fn manage_bonds(
             .position(|b| (b.a == e1 && b.b == e2) || (b.a == e2 && b.b == e1));
 
         if let Some(index) = bond_index {
-            info!("Deleting bond between {:?} and {:?}", e1, e2);
             connectivity.bonds.remove(index);
         } else {
             let Ok(type1) = atom_query.get(e1) else {
@@ -226,13 +329,11 @@ fn manage_bonds(
             let Ok(type2) = atom_query.get(e2) else {
                 return;
             };
-
             if force_field.bond_params.contains_key(&(
                 type1.type_name.clone(),
                 type2.type_name.clone(),
                 BondOrder::Single,
             )) {
-                info!("Creating bond between {:?} and {:?}", e1, e2);
                 connectivity.bonds.push(Bond {
                     a: e1,
                     b: e2,
@@ -246,103 +347,8 @@ fn manage_bonds(
                 return;
             }
         }
-
-        // Instead of calling a function, just send an event.
         rebuild_writer.write(RebuildConnectivityEvent);
     }
-}
-
-fn rebuild_on_event(
-    mut rebuild_reader: EventReader<RebuildConnectivityEvent>,
-    mut commands: Commands,
-    mut connectivity: ResMut<SystemConnectivity>,
-    bond_vis_query: Query<(Entity, &BondVisualization)>,
-    shared_handles: Res<SharedAssetHandles>,
-    force_field: Res<ForceField>,
-    atom_query: Query<&Atom>,
-) {
-    // Only run if the event was actually sent. This is an efficient way to check.
-    if rebuild_reader.is_empty() {
-        return;
-    }
-    // Important: Consume the events to prevent this from running again next frame.
-    rebuild_reader.clear();
-
-    info!("Rebuilding angles and bond visuals...");
-
-    // 1. Despawn all existing bond visuals to ensure a clean slate
-    for (entity, _) in bond_vis_query.iter() {
-        commands.entity(entity).despawn();
-    }
-
-    // 2. Clear all existing angles, they will be regenerated
-    connectivity.angles.clear();
-
-    // 3. Re-spawn visuals and regenerate angles from the new bond list
-    let mut adjacency: HashMap<Entity, Vec<Entity>> = HashMap::new();
-    for bond in &connectivity.bonds {
-        // Build adjacency list for angle generation
-        adjacency.entry(bond.a).or_default().push(bond.b);
-        adjacency.entry(bond.b).or_default().push(bond.a);
-
-        // Check if this bond is defined in the force field
-        let Ok([atom1, atom2]) = atom_query.get_many([bond.a, bond.b]) else {
-            continue;
-        };
-        let key = (atom1.type_name.clone(), atom2.type_name.clone(), bond.order);
-
-        let material_handle = if force_field.bond_params.contains_key(&key) {
-            shared_handles.bond_material.clone()
-        } else {
-            warn!(
-                "Found undefined bond between types: {} and {}",
-                atom1.type_name, atom2.type_name
-            );
-            shared_handles.undefined_bond_material.clone()
-        };
-
-        let num_strands = match bond.order {
-            BondOrder::Single => 1,
-            BondOrder::Double => 2,
-            BondOrder::Triple => 3,
-        };
-        for i in 0..num_strands {
-            commands.spawn((
-                Mesh3d(shared_handles.bond_mesh.clone()),
-                MeshMaterial3d(material_handle.clone()),
-                Transform::default(),
-                GlobalTransform::default(),
-                BondVisualization {
-                    atom1: bond.a,
-                    atom2: bond.b,
-                    strand_index: i,
-                    total_strands: num_strands,
-                },
-            ));
-        }
-    }
-
-    // Generate angles from the now-complete adjacency list
-    for (center_atom, neighbors) in adjacency {
-        if neighbors.len() < 2 {
-            continue;
-        }
-        for i in 0..neighbors.len() {
-            for j in (i + 1)..neighbors.len() {
-                connectivity.angles.push(Angle {
-                    a: neighbors[i],
-                    center: center_atom,
-                    b: neighbors[j],
-                });
-            }
-        }
-    }
-
-    info!(
-        "Connectivity and visuals rebuilt. Bonds: {}, Angles: {}",
-        connectivity.bonds.len(),
-        connectivity.angles.len()
-    );
 }
 
 #[derive(Resource, Default)]
@@ -460,17 +466,11 @@ fn delete_selected_atom(
     keys: Res<ButtonInput<KeyCode>>,
     mut selection: ResMut<SelectionState>,
     mut connectivity: ResMut<SystemConnectivity>,
-    // It also takes an EventWriter.
     mut rebuild_writer: EventWriter<RebuildConnectivityEvent>,
 ) {
     if keys.just_pressed(KeyCode::Delete) {
         let entities_to_delete = selection.selected.clone();
         if !entities_to_delete.is_empty() {
-            info!(
-                "Deletion key pressed for entities: {:?}",
-                entities_to_delete
-            );
-
             let mut connectivity_changed = false;
             for entity_to_delete in &entities_to_delete {
                 commands.entity(*entity_to_delete).despawn();
@@ -482,14 +482,10 @@ fn delete_selected_atom(
                     connectivity_changed = true;
                 }
             }
-
-            // Only trigger a rebuild if a bond was actually removed.
             if connectivity_changed {
                 rebuild_writer.write(RebuildConnectivityEvent);
             }
-
             selection.selected.clear();
-            info!("Cleared selection after deletion.");
         }
     }
 }

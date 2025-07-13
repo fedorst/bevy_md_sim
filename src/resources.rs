@@ -11,6 +11,11 @@ pub struct LastClick {
 }
 
 #[derive(Resource)]
+pub struct SimulationBox {
+    pub size: Vec3,
+}
+
+#[derive(Resource)]
 pub struct EnergyHistory {
     pub potential: VecDeque<(f64, f64)>, // (step, value)
     pub kinetic: VecDeque<(f64, f64)>,
@@ -53,20 +58,9 @@ pub enum BondOrder {
 
 // resources
 
-#[derive(Resource, Default, PartialEq, Eq, Clone, Copy, Debug)]
-pub struct StepSimulation(pub bool);
-
 #[derive(Resource)]
 pub struct SimulationParameters {
     pub dt: f32,
-}
-
-#[derive(Resource)]
-pub struct MoleculeSelection(pub String);
-
-#[derive(Resource, Default)]
-pub struct SimulationState {
-    pub paused: bool,
 }
 
 #[derive(Resource, Default)]

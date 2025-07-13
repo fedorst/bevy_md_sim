@@ -1,8 +1,9 @@
 // src/ui/hud.rs
 
+use crate::AppState;
 use crate::resources::{
-    ActiveWallTime, CurrentTemperature, SimulationParameters, SimulationState, StepCount,
-    SystemEnergy, Thermostat, ThermostatScale,
+    ActiveWallTime, CurrentTemperature, SimulationParameters, StepCount, SystemEnergy, Thermostat,
+    ThermostatScale,
 };
 use crate::spawning::{SMILESValidationResult, SpawnMoleculeFromSMILESEvent, ValidateSMILESEvent};
 use bevy::prelude::*;
@@ -33,7 +34,7 @@ fn hud_egui_system(
     mut egui_state: ResMut<EguiInputState>,
     mut validate_writer: EventWriter<ValidateSMILESEvent>,
     mut spawn_writer: EventWriter<SpawnMoleculeFromSMILESEvent>,
-    sim_state: Res<SimulationState>,
+    app_state: Res<State<AppState>>,
     active_wall_time: Res<ActiveWallTime>,
     step_count: Res<StepCount>,
     sim_params: Res<SimulationParameters>,
@@ -75,11 +76,10 @@ fn hud_egui_system(
 
     // --- 2. Center "PAUSED" / "RUNNING" Text ---
     // Only draw this if the simulation is paused.
-    if sim_state.paused {
+    if *app_state.get() == AppState::Paused {
         egui::Area::new(egui::Id::new("hud_paused_text"))
-            .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, -100.0)) // Position slightly above center
+            .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, -100.0))
             .show(ctx, |ui| {
-                // Use a large, bold, semi-transparent font for the status.
                 let text = egui::RichText::new("PAUSED")
                     .font(egui::FontId::proportional(48.0))
                     .color(egui::Color32::from_white_alpha(180))
@@ -87,6 +87,7 @@ fn hud_egui_system(
                 ui.label(text);
             });
     }
+
     let smiles_window = egui::Window::new("Molecule Input")
         .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -20.0))
         .collapsible(false)
@@ -118,7 +119,10 @@ fn hud_egui_system(
 
         if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
             if !egui_state.smiles.is_empty() {
-                spawn_writer.write(SpawnMoleculeFromSMILESEvent(egui_state.smiles.clone()));
+                spawn_writer.write(SpawnMoleculeFromSMILESEvent(
+                    egui_state.smiles.clone(),
+                    None,
+                ));
             }
         }
     });

@@ -1,8 +1,9 @@
 // src/ui/pause_menu.rs
 
-use crate::resources::{
-    ForceMultiplier, PauseMenuState, SimulationParameters, SimulationState, Thermostat,
-};
+use crate::AppState;
+use crate::components::Solvent;
+use crate::resources::{ForceMultiplier, PauseMenuState, SimulationParameters, Thermostat};
+use crate::spawning::{DespawnSolventEvent, SpawnSolventEvent};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
@@ -28,10 +29,13 @@ fn toggle_pause_menu_visibility(
 fn pause_menu_egui_system(
     mut contexts: EguiContexts,
     mut menu_state: ResMut<PauseMenuState>,
-    mut sim_state: ResMut<SimulationState>,
+    mut next_state: ResMut<NextState<AppState>>,
     mut sim_params: ResMut<SimulationParameters>,
     mut thermostat: ResMut<Thermostat>,
     mut force_multiplier: ResMut<ForceMultiplier>,
+    solvent_query: Query<Entity, With<Solvent>>,
+    mut spawn_writer: EventWriter<SpawnSolventEvent>,
+    mut despawn_writer: EventWriter<DespawnSolventEvent>,
 ) {
     let Ok(ctx) = contexts.ctx_mut() else { return };
     egui::Area::new(egui::Id::new("settings_button_area"))
@@ -43,7 +47,7 @@ fn pause_menu_egui_system(
                 ui.horizontal(|ui| {
                     if ui.button("Settings (M)").clicked() {
                         menu_state.visible = true;
-                        sim_state.paused = true;
+                        next_state.set(AppState::Paused); // Set the state to Paused.
                     }
                 });
             }
@@ -101,6 +105,26 @@ fn pause_menu_egui_system(
                     );
                     ui.end_row();
                 });
+
+            ui.add_space(10.0);
+            ui.separator();
+            ui.add_space(10.0);
+
+            // --- ADD THIS LOGIC ---
+            let is_solvent_present = !solvent_query.is_empty();
+            let button_text = if is_solvent_present {
+                "Despawn Solvent"
+            } else {
+                "Spawn Solvent"
+            };
+
+            if ui.button(button_text).clicked() {
+                if is_solvent_present {
+                    despawn_writer.write(DespawnSolventEvent);
+                } else {
+                    spawn_writer.write(SpawnSolventEvent);
+                }
+            }
 
             ui.add_space(10.0);
             ui.separator();
