@@ -146,6 +146,20 @@
       "charge": -0.55,
       "sigma": 0.307,
       "epsilon": 0.71128
+    },
+    "C_IM": {
+      "element": "C",
+      "mass": 12.011,
+      "charge": 0.15,
+      "sigma": 0.34,
+      "epsilon": 0.43932
+    },
+    "N_IM": {
+      "element": "N",
+      "mass": 14.007,
+      "charge": -0.45,
+      "sigma": 0.325,
+      "epsilon": 0.71128
     }
   },
   "bonds": [
@@ -207,6 +221,21 @@
     { "types": ["CA", "CA"], "order": "Single", "k": 389112.0, "r0": 0.14 },
     { "types": ["CT", "CA"], "order": "Single", "k": 284512.0, "r0": 0.151 },
     { "types": ["CA", "HA"], "order": "Single", "k": 301248.0, "r0": 0.108 },
+    {
+      "types": ["C_IM", "C_IM"],
+      "order": "Double",
+      "k": 485344.0,
+      "r0": 0.134
+    },
+    {
+      "types": ["C_IM", "N_IM"],
+      "order": "Single",
+      "k": 389112.0,
+      "r0": 0.138
+    },
+    { "types": ["CT", "C_IM"], "order": "Single", "k": 284512.0, "r0": 0.151 },
+    { "types": ["H_N", "N_IM"], "order": "Single", "k": 389112.0, "r0": 0.101 },
+    { "types": ["H_C", "C_IM"], "order": "Single", "k": 301248.0, "r0": 0.108 },
     {
       "types": ["N_AMINE", "H_N"],
       "order": "Single",
@@ -306,7 +335,52 @@
       "k": 389112.0,
       "r0": 0.101
     },
-    { "types": ["N_GUA", "H_N"], "order": "Single", "k": 389112.0, "r0": 0.101 }
+    {
+      "types": ["N_GUA", "H_N"],
+      "order": "Single",
+      "k": 389112.0,
+      "r0": 0.101
+    },
+    {
+      "types": ["C_CO", "O_COO"],
+      "order": "Single",
+      "k": 577392.0,
+      "r0": 0.125
+    },
+    { "types": ["CA", "CA"], "order": "Aromatic", "k": 401664.0, "r0": 0.139 },
+    {
+      "types": ["CA", "N_AMINE"],
+      "order": "Aromatic",
+      "k": 389112.0,
+      "r0": 0.138
+    },
+    {
+      "types": ["C_GUA", "N_GUA"],
+      "order": "Aromatic",
+      "k": 489528.0,
+      "r0": 0.133
+    },
+    { "types": ["CT", "N_NO2"], "order": "Single", "k": 300000.0, "r0": 0.145 },
+    {
+      "types": ["C_CO", "O_COO"],
+      "order": "Single",
+      "k": 577392.0,
+      "r0": 0.125
+    },
+    { "types": ["CA", "CA"], "order": "Aromatic", "k": 401664.0, "r0": 0.139 },
+    {
+      "types": ["CA", "N_AMINE"],
+      "order": "Aromatic",
+      "k": 389112.0,
+      "r0": 0.138
+    },
+    {
+      "types": ["C_GUA", "N_GUA"],
+      "order": "Aromatic",
+      "k": 489528.0,
+      "r0": 0.133
+    },
+    { "types": ["CT", "N_NO2"], "order": "Single", "k": 300000.0, "r0": 0.145 }
   ],
   "angles": [
     { "types": ["H_C", "CT", "H_C"], "k": 276.144, "theta0_deg": 107.8 },
@@ -363,7 +437,10 @@
     },
     { "types": ["O_CO", "C_CO", "O_ACID"], "k": 669.4, "theta0_deg": 122.0 },
     { "types": ["CT", "C_CO", "O_ACID"], "k": 418.4, "theta0_deg": 110.0 },
-    { "types": ["C_CO", "O_ACID", "H_O"], "k": 460.2, "theta0_deg": 108.5 }
+    { "types": ["C_CO", "O_ACID", "H_O"], "k": 460.2, "theta0_deg": 108.5 },
+    { "types": ["CT", "C_IM", "N_IM"], "k": 418.4, "theta0_deg": 125.0 },
+    { "types": ["N_IM", "C_IM", "N_IM"], "k": 502.0, "theta0_deg": 110.0 },
+    { "types": ["C_IM", "N_IM", "C_IM"], "k": 502.0, "theta0_deg": 108.0 }
   ],
   "dihedrals": [
     {

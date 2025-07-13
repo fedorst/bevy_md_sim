@@ -139,6 +139,11 @@ class TestAtomTyper(unittest.TestCase):
         smiles = "C[N+](=O)[O-]"
         self._validate_molecule(smiles, "Nitromethane")
 
+    def test_histidine_zwitterion_validation(self):
+        """Validates that Histidine, an aromatic case, is correct."""
+        smiles = "[NH3+][C@@H](CC1=CNC=N1)C(=O)[O-]"
+        self._validate_molecule(smiles, "Histidine (Zwitterion)")
+
 
 if __name__ == '__main__':
     unittest.main()
