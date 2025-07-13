@@ -4,8 +4,18 @@ import argparse
 import sys
 from rdkit import Chem
 from rdkit.Chem import AllChem
+import os
 
-# --- FINALIZED RULES ---
+FORCE_FIELD_PATH = os.path.join(os.path.dirname(__file__), 'assets', 'force_field.json')
+with open(FORCE_FIELD_PATH) as f:
+    FORCE_FIELD = json.load(f)
+
+VALID_BONDS = {}
+for bond_data in FORCE_FIELD['bonds']:
+    types = tuple(sorted(bond_data['types']))
+    order = bond_data.get('order', 'Single')
+    VALID_BONDS[(types[0], types[1])] = order
+
 # This order is definitive.
 TYPE_RULES = [
     # CHARGED SPECIES (Highest Precedence)
@@ -14,8 +24,9 @@ TYPE_RULES = [
 
     # HYDROGENS
     ("HA", "[H](~c)"),
-    ("H_N", "[H](~N)"),
     ("H_O", "[H](~O)"),
+
+    ("H_N", "[H](~N)"),
     ("H_C", "[H](~C)"),
 
     # SPECIAL HYBRIDIZATIONS
@@ -117,21 +128,27 @@ def build_molecule_from_smiles(smiles_string, name):
 
     fix_carboxylate_resonance(mol, assigned_types)
 
+    atom_type_map_by_index = {}
     for i, atom_spec in enumerate(atoms_data):
         if i in assigned_types:
             atom_spec['type_name'] = assigned_types[i]
         else:
-            print(f"Warning: No rule matched atom {atom_spec['id']}. Using element fallback.", file=sys.stderr)
             atom_spec['type_name'] = atom_spec['element']
+        atom_type_map_by_index[i] = atom_spec['type_name']
+
 
     bonds_list = []
     for bond in mol.GetBonds():
-        a1_id = f"{mol.GetAtomWithIdx(bond.GetBeginAtomIdx()).GetSymbol()}{bond.GetBeginAtomIdx() + 1}"
-        a2_id = f"{mol.GetAtomWithIdx(bond.GetEndAtomIdx()).GetSymbol()}{bond.GetEndAtomIdx() + 1}"
-        bond_type = bond.GetBondType()
+        a1_idx = bond.GetBeginAtomIdx()
+        a2_idx = bond.GetEndAtomIdx()
+        a1_id = f"{mol.GetAtomWithIdx(a1_idx).GetSymbol()}{a1_idx + 1}"
+        a2_id = f"{mol.GetAtomWithIdx(a2_idx).GetSymbol()}{a2_idx + 1}"
+        type1 = atom_type_map_by_index[a1_idx]
+        type2 = atom_type_map_by_index[a2_idx]
+        bond_key = tuple(sorted((type1, type2)))
         order_str = "Single"
-        if bond_type == Chem.BondType.DOUBLE: order_str = "Double"
-        elif bond_type == Chem.BondType.TRIPLE: order_str = "Triple"
+        order_str = VALID_BONDS.get(bond_key, "Single") # Default to single if not found
+
         bonds_list.append({"atoms": [a1_id, a2_id], "order": order_str})
 
     return {"name": name, "atoms": atoms_data, "bonds": bonds_list}

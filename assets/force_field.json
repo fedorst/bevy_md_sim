@@ -286,7 +286,27 @@
       "order": "Single",
       "k": 462750.4,
       "r0": 0.096
-    }
+    },
+    {
+      "types": ["C_GUA", "N_GUA"],
+      "order": "Single",
+      "k": 418400.0,
+      "r0": 0.133
+    },
+    {
+      "types": ["C_CO", "O_COO"],
+      "order": "Single",
+      "k": 577392.0,
+      "r0": 0.125
+    },
+    { "types": ["CT", "N_NO2"], "order": "Single", "k": 300000.0, "r0": 0.145 },
+    {
+      "types": ["N_PLUS", "H_N"],
+      "order": "Single",
+      "k": 389112.0,
+      "r0": 0.101
+    },
+    { "types": ["N_GUA", "H_N"], "order": "Single", "k": 389112.0, "r0": 0.101 }
   ],
   "angles": [
     { "types": ["H_C", "CT", "H_C"], "k": 276.144, "theta0_deg": 107.8 },
