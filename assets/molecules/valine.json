@@ -2,7 +2,7 @@
   "name": "Valine (Zwitterion)",
   "atoms": [
     {
-      "id": "N1",
+      "id": "N",
       "type_name": "N_PLUS",
       "element": "N",
       "pos": [
@@ -12,7 +12,7 @@
       ]
     },
     {
-      "id": "C2",
+      "id": "CA",
       "type_name": "CT",
       "element": "C",
       "pos": [
@@ -52,7 +52,7 @@
       ]
     },
     {
-      "id": "C6",
+      "id": "C",
       "type_name": "C_CO",
       "element": "C",
       "pos": [
@@ -195,14 +195,14 @@
   "bonds": [
     {
       "atoms": [
-        "N1",
-        "C2"
+        "N",
+        "CA"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "C2",
+        "CA",
         "C3"
       ],
       "order": "Single"
@@ -223,49 +223,49 @@
     },
     {
       "atoms": [
-        "C2",
-        "C6"
+        "CA",
+        "C"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "C6",
+        "C",
         "O7"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "C6",
+        "C",
         "O8"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "N1",
+        "N",
         "H9"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "N1",
+        "N",
         "H10"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "N1",
+        "N",
         "H11"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "C2",
+        "CA",
         "H12"
       ],
       "order": "Single"

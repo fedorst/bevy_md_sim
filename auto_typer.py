@@ -20,13 +20,30 @@ for bond_data in FORCE_FIELD['bonds']:
 
 # Use the original, proven TYPE_RULES
 TYPE_RULES = [
-    ("N_PLUS", "[N+1]"),("O_COO", "[O-1]"),("HA", "[H](~c)"),("H_N", "[H](~N)"),
-    ("H_O", "[H](~O)"),("H_C", "[H](~C)"),("C_NITRILE", "[C;D2]#[N;D1]"),
-    ("N_NITRILE", "[N;D1]#[C;D2]"),("O_ACID", "[O;H1;D2](C(=O))"),
-    ("N_AMIDE", "[N;D3](C(=O))"),("O_ETHER", "[O;D2](C)C"),
-    ("C_CO", "[C;D3](=[O;D1])"),("CA", "[c]"),("N_AMINE", "[N;H3;D3]"),
-    ("N_AMINE", "[N;H2;D3]"),("O_H", "[O;H2;D2]"),("O_H", "[O;H1;D2]"),
-    ("O_CO", "[O;D1]=[C]"),("CT", "[C;X4;!c]"),("N_AMINE", "[N;X3;!N+]"),
+    ("N_PLUS", "[N+1]"),
+    ("O_COO", "[O-1]"),
+    ("N_AR", "[n]"),
+    ("CA", "[c]"),
+    ("S_THIOL", "[S;H1,H0;X2](-C)"),
+    ("H_S", "[H](~S)"),
+    ("S_THIOETHER", "[S;D2](-C)(-C)"),
+    ("HA", "[H](~a)"),
+    ("H_N", "[H](~N)"),
+    ("H_O", "[H](~O)"),
+    ("H_C", "[H](~C)"),
+    ("C_NITRILE", "[C;D2]#[N;D1]"),
+    ("N_NITRILE", "[N;D1]#[C;D2]"),
+    ("O_ACID", "[O;H1;D2](C(=O))"),
+    ("N_AMIDE", "[N;D3](C(=O))"),
+    ("O_ETHER", "[O;D2](C)C"),
+    ("C_CO", "[C;D3](=[O;D1])"),
+    ("N_AMINE", "[N;H3;D3]"),
+    ("N_AMINE", "[N;H2;D3]"),
+    ("O_H", "[O;H2;D2]"),
+    ("O_H", "[O;H1;D2]"),
+    ("O_CO", "[O;D1]=[C]"),
+    ("CT", "[C;X4;!c]"),
+    ("N_AMINE", "[N;X3;!N+]"),
 ]
 
 def manually_type_histidine_ring(mol, assigned_types):
@@ -81,60 +98,82 @@ def fix_carboxylate_resonance(mol, assigned_types):
                         assigned_types[c_neighbor.GetIdx()] = 'O_COO'
                 break
 
+
+def rename_backbone_atom_ids(mol, atoms_data):
+    """
+    Finds the N-CA-C backbone and assigns standard IDs ("N", "CA", "C")
+    to the 'id' field for easy lookup.
+    """
+    # A robust pattern for the amino acid backbone
+    backbone_pattern = Chem.MolFromSmarts("[N;!H0;v3,v4]-[C;X4](-[H])-[C;X3](=[O;D1])")
+    matches = mol.GetSubstructMatches(backbone_pattern)
+
+    if not matches: # Fallback for Proline
+        backbone_pattern = Chem.MolFromSmarts("[N;H1,H2;r5]-[C;X4;r5](-[C;X3](=[O;D1]))")
+        matches = mol.GetSubstructMatches(backbone_pattern)
+        if not matches: return
+
+    n_idx, ca_idx, _, c_idx = matches[0][:4]
+
+    for atom_spec in atoms_data:
+        idx = atom_spec['idx']
+        if idx == n_idx: atom_spec['id'] = 'N'
+        elif idx == ca_idx: atom_spec['id'] = 'CA'
+        elif idx == c_idx: atom_spec['id'] = 'C'
+
 def build_molecule_from_smiles(smiles_string, name):
     mol = Chem.MolFromSmiles(smiles_string)
     if not mol: return None
 
     mol = Chem.AddHs(mol)
+    try: Chem.SanitizeMol(mol)
+    except Exception: pass
 
-    # THE FIX: Perform atom typing BEFORE sanitization and embedding.
-    atoms_data = [{"id": f"{a.GetSymbol()}{a.GetIdx() + 1}", "type_name": "", "element": a.GetSymbol(), "pos": [0,0,0]} for a in mol.GetAtoms()]
+    AllChem.EmbedMolecule(mol, AllChem.ETKDGv3())
+    AllChem.UFFOptimizeMolecule(mol)
+
+    atoms_data = []
+    conformer = mol.GetConformer()
+    for atom in mol.GetAtoms():
+        pos = conformer.GetAtomPosition(atom.GetIdx())
+        atoms_data.append({
+            "idx": atom.GetIdx(),
+            "id": f"{atom.GetSymbol()}{atom.GetIdx() + 1}",
+            "type_name": "", "element": atom.GetSymbol(),
+            "pos": [pos.x / 10.0, pos.y / 10.0, pos.z / 10.0]
+        })
+
     assigned_types = {}
     assign_special_groups(mol, assigned_types)
-
-    if "C1=CNC=N1" in smiles_string:
-        manually_type_histidine_ring(mol, assigned_types)
-
-
+    if "C1=CNC=N1" in smiles_string: manually_type_histidine_ring(mol, assigned_types)
     for type_name, smarts in TYPE_RULES:
         pattern = Chem.MolFromSmarts(smarts)
         if not pattern: continue
         for match_tuple in mol.GetSubstructMatches(pattern):
             if match_tuple[0] not in assigned_types:
                 assigned_types[match_tuple[0]] = type_name
-
-
     fix_carboxylate_resonance(mol, assigned_types)
 
-    atom_type_map_by_index = {}
-    for i, atom_spec in enumerate(atoms_data):
-        atom_spec['type_name'] = assigned_types.get(i, atom_spec['element'])
-        atom_type_map_by_index[i] = atom_spec['type_name']
+    atom_type_map_by_index = {spec['idx']: assigned_types.get(spec['idx'], spec['element']) for spec in atoms_data}
+    for spec in atoms_data:
+        spec['type_name'] = atom_type_map_by_index[spec['idx']]
 
-    # Now that we have types, we can assign bond orders from our force field.
+    rename_backbone_atom_ids(mol, atoms_data)
+
+    atom_type_map = {atom['id']: atom['type_name'] for atom in atoms_data}
     bonds_list = []
     for bond in mol.GetBonds():
         a1_idx, a2_idx = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
-        type1, type2 = atom_type_map_by_index[a1_idx], atom_type_map_by_index[a2_idx]
+        a1_id = next(item['id'] for item in atoms_data if item['idx'] == a1_idx)
+        a2_id = next(item['id'] for item in atoms_data if item['idx'] == a2_idx)
+        type1, type2 = atom_type_map[a1_id], atom_type_map[a2_id]
         bond_key = tuple(sorted((type1, type2)))
         order_str = BOND_ORDER_MAP.get(bond_key, "Single")
-
-        a1_id = f"{mol.GetAtomWithIdx(a1_idx).GetSymbol()}{a1_idx + 1}"
-        a2_id = f"{mol.GetAtomWithIdx(a2_idx).GetSymbol()}{a2_idx + 1}"
         bonds_list.append({"atoms": [a1_id, a2_id], "order": order_str})
 
-    # Now that typing is done, we can sanitize and generate coordinates.
-    try: Chem.SanitizeMol(mol)
-    except Exception: pass
-    AllChem.EmbedMolecule(mol, AllChem.ETKDGv3())
-    AllChem.UFFOptimizeMolecule(mol)
-
-    conformer = mol.GetConformer()
-    for i, atom_spec in enumerate(atoms_data):
-        pos = conformer.GetAtomPosition(i)
-        atom_spec['pos'] = [pos.x / 10.0, pos.y / 10.0, pos.z / 10.0]
-
+    for atom_spec in atoms_data: del atom_spec['idx']
     return {"name": name, "atoms": atoms_data, "bonds": bonds_list}
+
 def main():
     parser = argparse.ArgumentParser(description="Generate a typed molecule JSON from a SMILES string.")
     parser.add_argument("--smiles", required=True)

@@ -132,13 +132,19 @@ fn handle_spawn_solvent_event(
                                 let pos = Vec3::from(atom_spec.pos) + molecule_offset;
                                 spawned_atom_positions.push(pos);
                                 let radius = match atom_spec.element.as_str() {
+                                    "C" => 0.06,
                                     "O" => 0.05,
                                     "H" => 0.03,
+                                    "N" => 0.055,
+                                    "S" => 0.1,
                                     _ => 0.045,
                                 };
                                 let color = match atom_spec.element.as_str() {
+                                    "C" => Color::srgb(0.2, 0.2, 0.2),
                                     "O" => Color::srgb(1.0, 0.1, 0.1),
                                     "H" => Color::srgb(0.9, 0.9, 0.9),
+                                    "N" => Color::srgb(0.1, 0.1, 1.0),
+                                    "S" => Color::srgb(1.0, 1.0, 0.0),
                                     _ => Color::srgb(1.0, 0.2, 0.8),
                                 };
                                 let entity = parent
@@ -383,6 +389,7 @@ fn spawn_molecules_from_json(
                     "O" => 0.05,
                     "H" => 0.03,
                     "N" => 0.055,
+                    "S" => 0.1,
                     _ => 0.045,
                 };
                 let color = match atom_spec.element.as_str() {
@@ -390,6 +397,7 @@ fn spawn_molecules_from_json(
                     "O" => Color::srgb(1.0, 0.1, 0.1),
                     "H" => Color::srgb(0.9, 0.9, 0.9),
                     "N" => Color::srgb(0.1, 0.1, 1.0),
+                    "S" => Color::srgb(1.0, 1.0, 0.0),
                     _ => Color::srgb(1.0, 0.2, 0.8),
                 };
                 let entity = parent

@@ -2,7 +2,7 @@
   "name": "Tryptophan (Zwitterion)",
   "atoms": [
     {
-      "id": "N1",
+      "id": "N",
       "type_name": "N_PLUS",
       "element": "N",
       "pos": [
@@ -12,7 +12,7 @@
       ]
     },
     {
-      "id": "C2",
+      "id": "CA",
       "type_name": "CT",
       "element": "C",
       "pos": [
@@ -122,7 +122,7 @@
       ]
     },
     {
-      "id": "C13",
+      "id": "C",
       "type_name": "C_CO",
       "element": "C",
       "pos": [
@@ -275,14 +275,14 @@
   "bonds": [
     {
       "atoms": [
-        "N1",
-        "C2"
+        "N",
+        "CA"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "C2",
+        "CA",
         "C3"
       ],
       "order": "Single"
@@ -352,21 +352,21 @@
     },
     {
       "atoms": [
-        "C2",
-        "C13"
+        "CA",
+        "C"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "C13",
+        "C",
         "O14"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "C13",
+        "C",
         "O15"
       ],
       "order": "Single"
@@ -387,28 +387,28 @@
     },
     {
       "atoms": [
-        "N1",
+        "N",
         "H16"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "N1",
+        "N",
         "H17"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "N1",
+        "N",
         "H18"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "C2",
+        "CA",
         "H19"
       ],
       "order": "Single"

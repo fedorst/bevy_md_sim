@@ -2,7 +2,7 @@
   "name": "Histidine (Zwitterion)",
   "atoms": [
     {
-      "id": "N1",
+      "id": "N",
       "type_name": "N_PLUS",
       "element": "N",
       "pos": [
@@ -12,7 +12,7 @@
       ]
     },
     {
-      "id": "C2",
+      "id": "CA",
       "type_name": "CT",
       "element": "C",
       "pos": [
@@ -82,7 +82,7 @@
       ]
     },
     {
-      "id": "C9",
+      "id": "C",
       "type_name": "C_CO",
       "element": "C",
       "pos": [
@@ -205,14 +205,14 @@
   "bonds": [
     {
       "atoms": [
-        "N1",
-        "C2"
+        "N",
+        "CA"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "C2",
+        "CA",
         "C3"
       ],
       "order": "Single"
@@ -254,21 +254,21 @@
     },
     {
       "atoms": [
-        "C2",
-        "C9"
+        "CA",
+        "C"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "C9",
+        "C",
         "O10"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "C9",
+        "C",
         "O11"
       ],
       "order": "Single"
@@ -282,28 +282,28 @@
     },
     {
       "atoms": [
-        "N1",
+        "N",
         "H12"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "N1",
+        "N",
         "H13"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "N1",
+        "N",
         "H14"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "C2",
+        "CA",
         "H15"
       ],
       "order": "Single"

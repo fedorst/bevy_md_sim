@@ -135,6 +135,7 @@ fn display_bond_info(
                     BondOrder::Single => "Single Bond",
                     BondOrder::Double => "Double Bond",
                     BondOrder::Triple => "Triple Bond",
+                    BondOrder::Aromatic => "Aromatic Bond",
                 };
                 return Some(format!(
                     "Selected {}-{}\n\

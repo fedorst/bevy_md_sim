@@ -2,7 +2,7 @@
   "name": "Alanine (Zwitterion)",
   "atoms": [
     {
-      "id": "N1",
+      "id": "N",
       "type_name": "N_PLUS",
       "element": "N",
       "pos": [
@@ -12,7 +12,7 @@
       ]
     },
     {
-      "id": "C2",
+      "id": "CA",
       "type_name": "CT",
       "element": "C",
       "pos": [
@@ -32,7 +32,7 @@
       ]
     },
     {
-      "id": "C4",
+      "id": "C",
       "type_name": "C_CO",
       "element": "C",
       "pos": [
@@ -135,63 +135,63 @@
   "bonds": [
     {
       "atoms": [
-        "N1",
-        "C2"
+        "N",
+        "CA"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "C2",
+        "CA",
         "C3"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "C2",
-        "C4"
+        "CA",
+        "C"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "C4",
+        "C",
         "O5"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "C4",
+        "C",
         "O6"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "N1",
+        "N",
         "H7"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "N1",
+        "N",
         "H8"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "N1",
+        "N",
         "H9"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "C2",
+        "CA",
         "H10"
       ],
       "order": "Single"

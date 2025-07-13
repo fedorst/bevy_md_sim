@@ -5,17 +5,18 @@ mod help_panel;
 mod hud;
 mod info_panel;
 mod pause_menu;
+pub mod peptide_builder;
 mod system_metrics_panel;
 
 use crate::AppState;
 use crate::interaction::InteractionSet;
 use bevy::prelude::*;
-
 use force_inspector::ForceInspectorPlugin;
 use help_panel::HelpPanelPlugin;
 use hud::HudPlugin;
 use info_panel::InfoPanelPlugin;
 use pause_menu::PauseMenuPlugin;
+use peptide_builder::PeptideBuilderPlugin;
 use system_metrics_panel::SystemMetricsPanelPlugin;
 // This set can be used if any UI systems need to be ordered relative to each other.
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
@@ -33,14 +34,12 @@ impl Plugin for UIPlugin {
                 PauseMenuPlugin,
                 ForceInspectorPlugin,
                 SystemMetricsPanelPlugin,
+                PeptideBuilderPlugin,
             ))
             // Keep global UI controls here
             .add_systems(Update, (handle_simulation_control).in_set(UiSet));
     }
 }
-
-// These systems are global controls, not tied to a specific panel,
-// so they can live in the main `mod.rs`.
 
 fn handle_simulation_control(
     app_state: Res<State<AppState>>,

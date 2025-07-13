@@ -12,7 +12,7 @@
       ]
     },
     {
-      "id": "C2",
+      "id": "CA",
       "type_name": "CT",
       "element": "C",
       "pos": [
@@ -22,7 +22,7 @@
       ]
     },
     {
-      "id": "N3",
+      "id": "N",
       "type_name": "N_PLUS",
       "element": "N",
       "pos": [
@@ -42,7 +42,7 @@
       ]
     },
     {
-      "id": "C5",
+      "id": "C",
       "type_name": "C_CO",
       "element": "C",
       "pos": [
@@ -146,41 +146,41 @@
     {
       "atoms": [
         "C1",
-        "C2"
+        "CA"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "C2",
-        "N3"
+        "CA",
+        "N"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "N3",
+        "N",
         "C4"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "C2",
-        "C5"
+        "CA",
+        "C"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "C5",
+        "C",
         "O6"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "C5",
+        "C",
         "O7"
       ],
       "order": "Single"
@@ -208,21 +208,21 @@
     },
     {
       "atoms": [
-        "C2",
+        "CA",
         "H10"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "N3",
+        "N",
         "H11"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "N3",
+        "N",
         "H12"
       ],
       "order": "Single"

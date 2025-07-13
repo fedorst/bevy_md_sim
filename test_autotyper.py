@@ -7,34 +7,26 @@ import os
 # Import the function we want to test from your script
 from auto_typer import build_molecule_from_smiles
 
-# --- NEW: Load the force field once to check against it ---
-# This assumes the script is run from the project's root directory.
+# --- The force field loading part is correct and remains ---
 FORCE_FIELD_PATH = os.path.join('assets', 'force_field.json')
 with open(FORCE_FIELD_PATH) as f:
     FORCE_FIELD = json.load(f)
 
-# Create a set of valid bonds for fast lookups.
-# We store them as a canonical tuple: (sorted_type_1, sorted_type_2, order)
 VALID_BONDS = set()
 for bond_data in FORCE_FIELD['bonds']:
     types = tuple(sorted(bond_data['types']))
-    # Default to "Single" if 'order' key is missing, for backwards compatibility
     order = bond_data.get('order', 'Single')
     VALID_BONDS.add((types[0], types[1], order))
 
 class TestAtomTyper(unittest.TestCase):
     """
     A suite of unit tests to verify the correctness of the atom typing logic.
-    Each test provides a SMILES string for a known molecule and asserts that
-    the generated atom types match our expectations.
     """
 
-    # --- NEW: A more comprehensive validation helper ---
+    # THIS IS THE CORRECTED VALIDATION HELPER
     def _validate_molecule(self, smiles, name):
         """
-        Runs the molecule builder and performs critical validation checks:
-        1. Fails if any atom is not assigned a specific type (e.g., remains 'C' or 'H').
-        2. Fails if any generated bond is not defined in the force field.
+        Runs the molecule builder and performs critical validation checks.
         """
         mol_json = build_molecule_from_smiles(smiles, name)
         self.assertIsNotNone(mol_json, f"Molecule generation failed for {name} ({smiles})")
@@ -43,17 +35,17 @@ class TestAtomTyper(unittest.TestCase):
         atoms = mol_json['atoms']
         bonds = mol_json['bonds']
 
-        # 1. Check for any untyped atoms
         untyped_atoms = [atom for atom in atoms if atom['type_name'] in ['C', 'H', 'O', 'N']]
         self.assertEqual(len(untyped_atoms), 0, f"Found untyped atoms for {name}: {untyped_atoms}")
 
-        # 2. Check for any undefined bonds
         atom_type_map = {atom['id']: atom['type_name'] for atom in atoms}
+
         undefined_bonds = []
         for bond in bonds:
             atom1_id, atom2_id = bond['atoms']
             order = bond.get('order', 'Single')
 
+            # This line will now work correctly.
             type1 = atom_type_map[atom1_id]
             type2 = atom_type_map[atom2_id]
 
@@ -78,6 +70,15 @@ class TestAtomTyper(unittest.TestCase):
         return actual_types
 
     # --- NEW: Test cases for the amino acids we'll use in the peptide builder ---
+    def test_cysteine_zwitterion_validation(self):
+        """Validates that all atoms and bonds in Cysteine are correctly defined."""
+        smiles = "[NH3+]C(CS)C(=O)[O-]"
+        self._validate_molecule(smiles, "Cysteine (Zwitterion)")
+
+    def test_tryptophan_zwitterion_validation(self):
+        """Validates that Tryptophan's aromatic indole ring is typed correctly."""
+        smiles = "[NH3+]C(Cc1c[nH]c2ccccc12)C(=O)[O-]"
+        self._validate_molecule(smiles, "Tryptophan (Zwitterion)")
 
     def test_alanine_zwitterion_validation(self):
         """Validates that all atoms and bonds in Alanine are correctly defined."""

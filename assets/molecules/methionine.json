@@ -2,7 +2,7 @@
   "name": "Methionine (Zwitterion)",
   "atoms": [
     {
-      "id": "N1",
+      "id": "N",
       "type_name": "N_PLUS",
       "element": "N",
       "pos": [
@@ -12,7 +12,7 @@
       ]
     },
     {
-      "id": "C2",
+      "id": "CA",
       "type_name": "CT",
       "element": "C",
       "pos": [
@@ -43,7 +43,7 @@
     },
     {
       "id": "S5",
-      "type_name": "S",
+      "type_name": "S_THIOL",
       "element": "S",
       "pos": [
         0.26254016650475315,
@@ -62,7 +62,7 @@
       ]
     },
     {
-      "id": "C7",
+      "id": "C",
       "type_name": "C_CO",
       "element": "C",
       "pos": [
@@ -205,14 +205,14 @@
   "bonds": [
     {
       "atoms": [
-        "N1",
-        "C2"
+        "N",
+        "CA"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "C2",
+        "CA",
         "C3"
       ],
       "order": "Single"
@@ -240,49 +240,49 @@
     },
     {
       "atoms": [
-        "C2",
-        "C7"
+        "CA",
+        "C"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "C7",
+        "C",
         "O8"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "C7",
+        "C",
         "O9"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "N1",
+        "N",
         "H10"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "N1",
+        "N",
         "H11"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "N1",
+        "N",
         "H12"
       ],
       "order": "Single"
     },
     {
       "atoms": [
-        "C2",
+        "CA",
         "H13"
       ],
       "order": "Single"

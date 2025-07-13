@@ -2,7 +2,23 @@ use bevy::prelude::*;
 use serde::Deserialize;
 use std::collections::VecDeque;
 use std::collections::{HashMap, HashSet};
-use std::time::Duration;
+use std::time::Duration; // Add this
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct AminoAcidData {
+    pub name: String,
+    pub three_letter_code: String,
+    pub one_letter_code: String,
+    pub smiles_zwitterionic: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AminoAcidFile {
+    pub amino_acids: Vec<AminoAcidData>,
+}
+
+#[derive(Resource, Debug)]
+pub struct AminoAcidInfo(pub Vec<AminoAcidData>);
 
 #[derive(Resource, Default)]
 pub struct LastClick {
@@ -54,6 +70,7 @@ pub enum BondOrder {
     Single,
     Double,
     Triple,
+    Aromatic,
 }
 
 // resources

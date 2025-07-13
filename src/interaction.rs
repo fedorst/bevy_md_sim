@@ -102,6 +102,7 @@ fn rebuild_connectivity_and_visuals_on_event(
             BondOrder::Single => 1,
             BondOrder::Double => 2,
             BondOrder::Triple => 3,
+            BondOrder::Aromatic => 1,
         };
         for i in 0..num_strands {
             commands.spawn((
