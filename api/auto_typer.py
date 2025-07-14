@@ -6,9 +6,10 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 import os
 
-# THE FIX: Load the force field and create a lookup for defined bonds.
-# This lookup will be our primary source of truth for bond orders.
-FORCE_FIELD_PATH = os.path.join(os.path.dirname(__file__), 'assets', 'force_field.json')
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+FORCE_FIELD_PATH = os.path.join(PROJECT_ROOT, 'assets', 'force_field.json')
+
 with open(FORCE_FIELD_PATH) as f:
     FORCE_FIELD = json.load(f)
 

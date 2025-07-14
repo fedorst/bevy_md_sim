@@ -2,3 +2,4 @@
 .zed
 __pycache__
 .venv
+*.pyc

@@ -28,11 +28,14 @@ AMINO_ACIDS = [
     ("Glutamic Acid", "Glu", "E", "[NH3+]C(CCC(=O)[O-])C(=O)[O-]"),
 ]
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+
 def write_json_file():
     """
     Converts the hard-coded amino acid list into a structured JSON file.
     """
-    output_path = os.path.join("assets", "amino_acids.json")
+    output_path = os.path.join(PROJECT_ROOT, "assets", "amino_acids.json")
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     # Structure the data for clarity in the JSON file
@@ -56,7 +59,7 @@ def write_json_file():
     print("Successfully created amino_acids.json.")
 
 def generate_and_save_molecules():
-    output_dir = os.path.join("assets", "molecules")
+    output_dir = os.path.join(PROJECT_ROOT, "assets", "molecules")
     os.makedirs(output_dir, exist_ok=True)
 
     print(f"Generating amino acid files in '{output_dir}'...")

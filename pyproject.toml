@@ -5,6 +5,8 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "fastapi>=0.116.1",
+    "pydantic>=2.11.7",
     "rdkit-stubs>=0.8",
     "rdkit>=2025.3.3",
 ]

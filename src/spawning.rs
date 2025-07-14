@@ -82,7 +82,7 @@ fn handle_spawn_solvent_event(
         return;
     };
     let output = match std::process::Command::new("python")
-        .arg("auto_typer.py")
+        .arg("api/auto_typer.py")
         .arg("--smiles")
         .arg("O")
         .output()
@@ -232,7 +232,7 @@ fn trigger_smiles_validation(
                 return SMILESValidationResult(Err("SMILES string is empty.".to_string()));
             }
             let output = std::process::Command::new("python")
-                .arg("auto_typer.py")
+                .arg("api/auto_typer.py")
                 .arg("--smiles")
                 .arg(&smiles)
                 .output();
@@ -283,7 +283,7 @@ fn trigger_molecule_generation(
         let grid_info = event.1;
         info!("Received request to spawn molecule from SMILES: {}", smiles);
         let output = match std::process::Command::new("python")
-            .arg("auto_typer.py")
+            .arg("api/auto_typer.py")
             .arg("--smiles")
             .arg(smiles)
             .output()
