@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from src_py.auto_typer import build_molecule_from_smiles # Import from your library
+from rdkit import rdBase
 
 # Vercel will look for this 'app' variable
 app = FastAPI()
@@ -38,3 +39,12 @@ def generate_molecule(request: SmilesRequest):
 @app.get("/")
 def read_root():
     return {"status": "ok", "message": "Molecule Generation API is running."}
+
+@app.get("/test_rdkit")
+def test_rdkit_version():
+    """A simple endpoint to verify that RDKit can be imported and used."""
+    try:
+        version = rdBase.rdkitVersion
+        return {"status": "ok", "rdkit_version": version}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
