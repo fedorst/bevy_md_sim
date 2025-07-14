@@ -6,19 +6,23 @@ use crate::resources::{AtomIdMap, Bond, BondOrder, LastSaveTime, SystemConnectiv
 use bevy::prelude::*; // Make sure Time is imported
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
-// --- Plugin Definition ---
 pub struct PersistencePlugin;
+pub const SAVE_FILE_PATH: &str = "simulation_state.json";
 
 impl Plugin for PersistencePlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<SaveStateEvent>()
             .add_event::<LoadStateEvent>()
-            // THE FIX: Move update_save_time_display to a separate system to avoid validation errors
-            // with its Local timer parameter.
-            .add_systems(Update, (save_state_on_event, load_state_on_event))
-            .add_systems(Update, update_save_time_display.after(save_state_on_event));
+            .add_systems(
+                Update,
+                (
+                    save_state_on_event,
+                    load_state_on_event,
+                    update_save_time_display,
+                ),
+            );
     }
 }
 
@@ -29,7 +33,7 @@ pub struct SaveStateEvent(pub String); // Carries the filepath
 #[derive(Event)]
 pub struct LoadStateEvent(pub String); // Carries the filepath
 
-// --- Data Structures for Serialization (with `element` field added) ---
+// --- Data Structures for Serialization
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AtomState {
     pub id: String,
@@ -235,20 +239,53 @@ fn load_state_on_event(
     }
 }
 
-fn update_save_time_display(mut last_save_time: ResMut<LastSaveTime>) {
-    // Check if the file exists.
-    if let Ok(metadata) = std::fs::metadata("save_state.json") {
+fn update_save_time_display(
+    mut last_save_time: ResMut<LastSaveTime>,
+    // This system runs on a timer to avoid checking the file system every single frame.
+    time: Res<Time>,
+    mut timer: Local<Timer>,
+) {
+    timer.set_duration(Duration::from_secs(1)); // Check once per second
+    timer.tick(time.delta());
+    if !timer.finished() {
+        return;
+    }
+
+    if let Ok(metadata) = std::fs::metadata(SAVE_FILE_PATH) {
         if let Ok(modified_time) = metadata.modified() {
-            // Get the duration since the file was last modified.
             if let Ok(elapsed) = SystemTime::now().duration_since(modified_time) {
-                last_save_time.display_text = format!("Last save: {}s ago", elapsed.as_secs());
+                // THE FIX: Format the duration into a human-readable string.
+                last_save_time.display_text = format_time_ago(elapsed.as_secs());
             } else {
                 last_save_time.display_text = "Last save: now".to_string();
             }
         } else {
-            last_save_time.display_text = "Save file time invalid".to_string();
+            last_save_time.display_text = "Save time invalid".to_string();
         }
     } else {
         last_save_time.display_text = "No save file".to_string();
     }
+}
+
+// THE FIX: A new helper function to format seconds into a nice string.
+fn format_time_ago(seconds: u64) -> String {
+    if seconds < 2 {
+        return "Last save: just now".to_string();
+    }
+    if seconds < 60 {
+        return format!("Last save: {}s ago", seconds);
+    }
+
+    let minutes = seconds / 60;
+    if minutes < 60 {
+        return format!("Last save: {}m ago", minutes);
+    }
+
+    let hours = minutes / 60;
+    if hours < 24 {
+        return format!("Last save: {}h ago", hours);
+    }
+
+    let days = hours / 24;
+    format!("Last save: {}d ago", days)
 }

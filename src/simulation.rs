@@ -379,17 +379,13 @@ fn calculate_bond_and_constraint_forces(
         }
     }
 
-    // --- 2. YOUR ELEGANT GROUP DRAG LOGIC ---
     if let (Some(initial_centroid), Some(target_centroid)) =
         (drag_state.initial_centroid, drag_state.target_centroid)
     {
-        // The delta is now calculated from the continuously updated target.
         let delta = target_centroid - initial_centroid;
 
-        // Apply the constraint force to every selected atom.
         for (i, (entity, constraint)) in constraint_q.iter().enumerate() {
             if let Ok((atom_transform, mut force, _)) = atom_query.get_mut(entity) {
-                // The target for each atom is its starting position plus the shared delta.
                 let target_pos = drag_state.initial_positions[i] + delta;
                 let force_vec = (target_pos - atom_transform.translation) * constraint.stiffness;
                 force.bond += force_vec;

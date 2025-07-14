@@ -75,10 +75,9 @@ fn hud_egui_system(
         });
 
     // --- 2. Center "PAUSED" / "RUNNING" Text ---
-    // Only draw this if the simulation is paused.
     if *app_state.get() == AppState::Paused {
         egui::Area::new(egui::Id::new("hud_paused_text"))
-            .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, -100.0))
+            .anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, 100.0))
             .show(ctx, |ui| {
                 let text = egui::RichText::new("PAUSED")
                     .font(egui::FontId::proportional(48.0))

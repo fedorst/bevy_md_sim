@@ -2,7 +2,7 @@
 
 use crate::AppState;
 use crate::components::Solvent;
-use crate::persistence::{LoadStateEvent, SaveStateEvent};
+use crate::persistence::{LoadStateEvent, SAVE_FILE_PATH, SaveStateEvent};
 use crate::resources::{
     ForceMultiplier, LastSaveTime, PauseMenuState, SimulationParameters, Thermostat,
 };
@@ -40,19 +40,17 @@ fn pause_menu_egui_system(
     mut despawn_writer: EventWriter<DespawnSolventEvent>,
     mut save_state_writer: EventWriter<SaveStateEvent>,
     mut load_state_writer: EventWriter<LoadStateEvent>,
-    last_save_time: Res<LastSaveTime>, // Add the resource
+    last_save_time: Res<LastSaveTime>,
 ) {
     let Ok(ctx) = contexts.ctx_mut() else { return };
     egui::Area::new(egui::Id::new("settings_button_area"))
         .anchor(egui::Align2::RIGHT_TOP, egui::vec2(-10.0, 10.0))
         .show(ctx, |ui| {
-            // If the menu is closed, show the button to open it.
             if !menu_state.visible {
-                // THE FIX for the layout bug: Use a horizontal layout to prevent wrapping.
                 ui.horizontal(|ui| {
                     if ui.button("Settings (M)").clicked() {
                         menu_state.visible = true;
-                        next_state.set(AppState::Paused); // Set the state to Paused.
+                        next_state.set(AppState::Paused);
                     }
                 });
             }
@@ -137,10 +135,10 @@ fn pause_menu_egui_system(
 
             ui.horizontal(|ui| {
                 if ui.button("Save State").clicked() {
-                    save_state_writer.write(SaveStateEvent("save_state.json".to_string()));
+                    save_state_writer.write(SaveStateEvent(SAVE_FILE_PATH.to_string()));
                 }
                 if ui.button("Load State").clicked() {
-                    load_state_writer.write(LoadStateEvent("save_state.json".to_string()));
+                    load_state_writer.write(LoadStateEvent(SAVE_FILE_PATH.to_string()));
                 }
             });
             ui.add_space(2.0);
