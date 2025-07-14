@@ -3,6 +3,7 @@
 use crate::components::{Acceleration, Atom, Force, Molecule, Velocity};
 use crate::interaction::RebuildConnectivityEvent;
 use crate::resources::{AtomIdMap, Bond, BondOrder, LastSaveTime, SystemConnectivity};
+use crate::spawning_utils::get_atom_visuals;
 use bevy::prelude::*; // Make sure Time is imported
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -176,23 +177,7 @@ fn load_state_on_event(
 
         commands.entity(molecule_entity).with_children(|parent| {
             for atom_state in &save_state.atoms {
-                let radius = match atom_state.element.as_str() {
-                    "C" => 0.06,
-                    "O" => 0.05,
-                    "H" => 0.03,
-                    "N" => 0.055,
-                    "S" => 0.1,
-                    _ => 0.045,
-                };
-                let color = match atom_state.element.as_str() {
-                    "C" => Color::srgb(0.2, 0.2, 0.2),
-                    "O" => Color::srgb(1.0, 0.1, 0.1),
-                    "H" => Color::srgb(0.9, 0.9, 0.9),
-                    "N" => Color::srgb(0.1, 0.1, 1.0),
-                    "S" => Color::srgb(1.0, 1.0, 0.0),
-                    _ => Color::srgb(1.0, 0.2, 0.8),
-                };
-
+                let (radius, color) = get_atom_visuals(&atom_state.element);
                 let entity = parent
                     .spawn((
                         Atom {

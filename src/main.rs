@@ -7,8 +7,9 @@ mod resources;
 mod setup;
 mod simulation;
 mod spawning;
+mod spawning_utils;
 mod ui;
-mod visualization;
+mod visualization; // ADD THIS LINE
 
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
