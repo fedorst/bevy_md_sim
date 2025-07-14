@@ -9,6 +9,7 @@ dependencies = [
     "pydantic>=2.11.7",
     "rdkit-stubs>=0.8",
     "rdkit>=2025.3.3",
+    "uvicorn>=0.35.0",
 ]
 [tool.pyright]
 venvPath = "."
