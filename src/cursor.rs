@@ -3,6 +3,7 @@
 use crate::components::Atom;
 use crate::interaction::SelectionState;
 use crate::resources::DragState;
+use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 use bevy::winit::cursor::CursorIcon;
 use bevy_egui::EguiContexts;
@@ -15,6 +16,8 @@ enum CursorState {
     Hover,
     Dragging,
     Draggable,
+    ZoomingIn,
+    ZoomingOut,
     // the rest is not in use until i figure out how to override egui pointer preferences
     Text,
     ResizeEW, // East-West
@@ -28,12 +31,14 @@ pub struct CustomCursorPlugin;
 impl Plugin for CustomCursorPlugin {
     fn build(&self, app: &mut App) {
         app.init_state::<CursorState>()
+            .init_resource::<ZoomStateTimer>()
             .add_systems(Startup, load_cursor_assets)
             .add_systems(
                 Update,
                 (
                     create_resized_cursors
                         .run_if(resource_exists_and_changed::<CursorAssetHandles>),
+                    handle_zoom_cursor,
                     determine_cursor_state,
                     apply_cursor_icon
                         .run_if(state_changed::<CursorState>)
@@ -52,6 +57,8 @@ struct CursorIcons {
     dragging: CursorIcon,
     draggable: CursorIcon,
     text: CursorIcon,
+    zoom_in: CursorIcon,
+    zoom_out: CursorIcon,
     resize_ew: CursorIcon,
     resize_ns: CursorIcon,
     resize_nesw: CursorIcon,
@@ -65,10 +72,23 @@ struct CursorAssetHandles {
     dragging: Handle<Image>,
     draggable: Handle<Image>,
     text: Handle<Image>,
+    zoom_in: Handle<Image>,
+    zoom_out: Handle<Image>,
     resize_ew: Handle<Image>,
     resize_ns: Handle<Image>,
     resize_nesw: Handle<Image>,
     resize_nwse: Handle<Image>,
+}
+
+#[derive(Resource)]
+struct ZoomStateTimer(Timer);
+
+impl Default for ZoomStateTimer {
+    fn default() -> Self {
+        let mut timer = Timer::from_seconds(0.2, TimerMode::Once);
+        timer.pause();
+        Self(timer)
+    }
 }
 
 fn load_cursor_assets(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -83,6 +103,8 @@ fn load_cursor_assets(mut commands: Commands, asset_server: Res<AssetServer>) {
         resize_ns: asset_server.load("cursors/resize_a_vertical.png"),
         resize_nesw: asset_server.load("cursors/resize_a_diagonal.png"),
         resize_nwse: asset_server.load("cursors/resize_a_diagonal_mirror.png"),
+        zoom_in: asset_server.load("cursors/zoom_in.png"),
+        zoom_out: asset_server.load("cursors/zoom_out.png"),
     });
 }
 
@@ -98,6 +120,8 @@ fn create_resized_cursors(
         Some(dragging_img),
         Some(draggable_img),
         Some(text_img),
+        Some(zoom_in_img),
+        Some(zoom_out_img),
         Some(resize_ew_img),
         Some(resize_ns_img),
         Some(resize_nesw_img),
@@ -108,6 +132,8 @@ fn create_resized_cursors(
         images.get(&handles.dragging),
         images.get(&handles.draggable),
         images.get(&handles.text),
+        images.get(&handles.zoom_in),
+        images.get(&handles.zoom_out),
         images.get(&handles.resize_ew),
         images.get(&handles.resize_ns),
         images.get(&handles.resize_nesw),
@@ -119,6 +145,8 @@ fn create_resized_cursors(
         let dragging_resized = resize_image(dragging_img, 32, 32);
         let draggable_resized = resize_image(draggable_img, 32, 32);
         let text_resized = resize_image(text_img, 32, 32);
+        let zoom_in_resized = resize_image(zoom_in_img, 32, 32);
+        let zoom_out_resized = resize_image(zoom_out_img, 32, 32);
         let resize_ew_resized = resize_image(resize_ew_img, 32, 32);
         let resize_ns_resized = resize_image(resize_ns_img, 32, 32);
         let resize_nesw_resized = resize_image(resize_nesw_img, 32, 32);
@@ -129,6 +157,8 @@ fn create_resized_cursors(
         let dragging_handle = images.add(dragging_resized);
         let draggable_handle = images.add(draggable_resized);
         let text_handle = images.add(text_resized);
+        let zoom_in_handle = images.add(zoom_in_resized);
+        let zoom_out_handle = images.add(zoom_out_resized);
         let resize_ew_handle = images.add(resize_ew_resized);
         let resize_ns_handle = images.add(resize_ns_resized);
         let resize_nesw_handle = images.add(resize_nesw_resized);
@@ -190,6 +220,27 @@ fn create_resized_cursors(
             },
         ));
 
+        let zoom_in_cursor = CursorIcon::Custom(bevy::winit::cursor::CustomCursor::Image(
+            bevy::winit::cursor::CustomCursorImage {
+                handle: zoom_in_handle,
+                texture_atlas: None,
+                flip_x: false,
+                flip_y: false,
+                rect: None,
+                hotspot: (8, 8),
+            },
+        ));
+        let zoom_out_cursor = CursorIcon::Custom(bevy::winit::cursor::CustomCursor::Image(
+            bevy::winit::cursor::CustomCursorImage {
+                handle: zoom_out_handle,
+                texture_atlas: None,
+                flip_x: false,
+                flip_y: false,
+                rect: None,
+                hotspot: (8, 8),
+            },
+        ));
+
         let resize_ew_cursor = CursorIcon::Custom(bevy::winit::cursor::CustomCursor::Image(
             bevy::winit::cursor::CustomCursorImage {
                 handle: resize_ew_handle,
@@ -241,6 +292,8 @@ fn create_resized_cursors(
             dragging: dragging_cursor,
             draggable: draggable_cursor,
             text: text_cursor,
+            zoom_in: zoom_in_cursor,
+            zoom_out: zoom_out_cursor,
             resize_ew: resize_ew_cursor,
             resize_ns: resize_ns_cursor,
             resize_nesw: resize_nesw_cursor,
@@ -249,6 +302,29 @@ fn create_resized_cursors(
 
         commands.remove_resource::<CursorAssetHandles>();
         info!("Resized cursor images created");
+    }
+}
+
+fn handle_zoom_cursor(
+    mut scroll_evr: EventReader<MouseWheel>,
+    mut next_state: ResMut<NextState<CursorState>>,
+    mut zoom_timer: ResMut<ZoomStateTimer>,
+) {
+    if scroll_evr.is_empty() {
+        return;
+    }
+
+    // Since we're scrolling, unpause and reset the timer.
+    zoom_timer.0.unpause();
+    zoom_timer.0.reset();
+
+    // Use a fold to get the net scroll direction for the frame
+    let net_y = scroll_evr.read().fold(0.0, |acc, ev| acc + ev.y);
+
+    if net_y > 0.0 {
+        next_state.set(CursorState::ZoomingIn);
+    } else if net_y < 0.0 {
+        next_state.set(CursorState::ZoomingOut);
     }
 }
 
@@ -297,10 +373,19 @@ fn determine_cursor_state(
     atom_hover_q: Query<(Entity, &PickingInteraction), With<Atom>>,
     selection: Res<SelectionState>,
     mut next_state: ResMut<NextState<CursorState>>,
+    mut zoom_timer: ResMut<ZoomStateTimer>,
+    time: Res<Time>,
 ) {
     let Ok(ctx) = egui_contexts.ctx_mut() else {
         return;
     };
+
+    zoom_timer.0.tick(time.delta());
+    if !zoom_timer.0.finished() {
+        // If the timer is active, we are in a "zoom" state.
+        // Do nothing and return early, preventing the logic below from overriding it.
+        return;
+    }
 
     let mut new_state = CursorState::Default;
 
@@ -369,6 +454,8 @@ fn apply_cursor_icon(
         CursorState::Dragging => &cursor_icons.dragging,
         CursorState::Draggable => &cursor_icons.draggable,
         CursorState::Text => &cursor_icons.text,
+        CursorState::ZoomingIn => &cursor_icons.zoom_in,
+        CursorState::ZoomingOut => &cursor_icons.zoom_out,
         CursorState::ResizeEW => &cursor_icons.resize_ew,
         CursorState::ResizeNS => &cursor_icons.resize_ns,
         CursorState::ResizeNESW => &cursor_icons.resize_nesw,
