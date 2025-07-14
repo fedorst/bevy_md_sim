@@ -35,7 +35,9 @@ impl Plugin for CustomCursorPlugin {
                     create_resized_cursors
                         .run_if(resource_exists_and_changed::<CursorAssetHandles>),
                     determine_cursor_state,
-                    apply_cursor_icon.run_if(state_changed::<CursorState>),
+                    apply_cursor_icon
+                        .run_if(state_changed::<CursorState>)
+                        .run_if(resource_exists::<CursorIcons>),
                 )
                     .chain(),
             );

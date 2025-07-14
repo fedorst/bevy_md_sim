@@ -1,8 +1,14 @@
 use bevy::prelude::*;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::collections::{HashMap, HashSet};
 use std::time::Duration; // Add this
+
+#[derive(Resource, Default)]
+pub struct LastSaveTime {
+    pub timestamp: Option<u64>,
+    pub display_text: String,
+}
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct AminoAcidData {
@@ -65,7 +71,7 @@ pub struct Angle {
     pub center: Entity,
     pub b: Entity,
 }
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BondOrder {
     Single,
     Double,

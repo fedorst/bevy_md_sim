@@ -2,6 +2,7 @@ mod components;
 mod config;
 mod cursor;
 mod interaction;
+mod persistence;
 mod resources;
 mod setup;
 mod simulation;
@@ -15,6 +16,7 @@ use bevy_panorbit_camera::PanOrbitCameraPlugin;
 use clap::Parser;
 use cursor::CustomCursorPlugin;
 use interaction::{InteractionPlugin, RebuildConnectivityEvent};
+use persistence::PersistencePlugin;
 use resources::*;
 use setup::SetupPlugin;
 use simulation::SimulationPlugin;
@@ -76,6 +78,7 @@ impl Plugin for CorePlugin {
             .init_resource::<EnergyHistory>()
             .init_resource::<CurrentTemperature>()
             .init_resource::<AtomIdMap>()
+            .init_resource::<LastSaveTime>()
             .init_resource::<LastClick>()
             .init_resource::<ExcludedPairs>();
         // .add_systems(Update, track_active_wall_time);
@@ -135,6 +138,7 @@ fn main() {
             InteractionPlugin,
             SpawningPlugin,
             CustomCursorPlugin,
+            PersistencePlugin,
         ))
         .add_systems(
             Update,

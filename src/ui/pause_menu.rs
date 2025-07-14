@@ -2,11 +2,13 @@
 
 use crate::AppState;
 use crate::components::Solvent;
-use crate::resources::{ForceMultiplier, PauseMenuState, SimulationParameters, Thermostat};
+use crate::persistence::{LoadStateEvent, SaveStateEvent};
+use crate::resources::{
+    ForceMultiplier, LastSaveTime, PauseMenuState, SimulationParameters, Thermostat,
+};
 use crate::spawning::{DespawnSolventEvent, SpawnSolventEvent};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
-
 pub struct PauseMenuPlugin;
 
 impl Plugin for PauseMenuPlugin {
@@ -36,6 +38,9 @@ fn pause_menu_egui_system(
     solvent_query: Query<Entity, With<Solvent>>,
     mut spawn_writer: EventWriter<SpawnSolventEvent>,
     mut despawn_writer: EventWriter<DespawnSolventEvent>,
+    mut save_state_writer: EventWriter<SaveStateEvent>,
+    mut load_state_writer: EventWriter<LoadStateEvent>,
+    last_save_time: Res<LastSaveTime>, // Add the resource
 ) {
     let Ok(ctx) = contexts.ctx_mut() else { return };
     egui::Area::new(egui::Id::new("settings_button_area"))
@@ -129,6 +134,20 @@ fn pause_menu_egui_system(
             ui.add_space(10.0);
             ui.separator();
             ui.add_space(10.0);
+
+            ui.horizontal(|ui| {
+                if ui.button("Save State").clicked() {
+                    save_state_writer.write(SaveStateEvent("save_state.json".to_string()));
+                }
+                if ui.button("Load State").clicked() {
+                    load_state_writer.write(LoadStateEvent("save_state.json".to_string()));
+                }
+            });
+            ui.add_space(2.0);
+            ui.label(&last_save_time.display_text);
+
+            ui.add_space(10.0);
+            ui.separator();
 
             ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
                 if ui.button("Close").clicked() {
