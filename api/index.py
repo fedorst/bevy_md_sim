@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 # Assuming auto_typer.py is also in the api/ directory
-from auto_typer import build_molecule_from_smiles
+from src_py.auto_typer import build_molecule_from_smiles
 
 app = FastAPI()
 
