@@ -18,7 +18,6 @@ app.add_middleware(
 class SmilesRequest(BaseModel):
     smiles: str
 
-@app.post("/api/generate_molecule") # The full URL will be your-site.vercel.app/api/generate_molecule
+@app.post("/generate_molecule")
 def generate_molecule(request: SmilesRequest):
-    # The endpoint now directly calls your existing, well-tested function
     return build_molecule_from_smiles(request.smiles, "Generated Molecule")
