@@ -106,7 +106,7 @@ jobs:
           host: md.fedor.ee
           username: fedor
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "./static/"
+          source: "./static/*"
           target: "/var/www/md.fedor.ee"
           strip_components: 1
 
