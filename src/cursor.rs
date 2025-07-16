@@ -9,6 +9,14 @@ use bevy::winit::cursor::CursorIcon;
 use bevy_egui::EguiContexts;
 use bevy_picking::hover::PickingInteraction;
 
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, States)]
+enum CursorLoadingState {
+    #[default]
+    NotLoaded,
+    Loading,
+    Finished,
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Default, States, Hash)]
 enum CursorState {
     #[default]
@@ -30,19 +38,20 @@ pub struct CustomCursorPlugin;
 
 impl Plugin for CustomCursorPlugin {
     fn build(&self, app: &mut App) {
-        app.init_state::<CursorState>()
+        app.init_state::<CursorLoadingState>()
+            .init_state::<CursorState>()
             .init_resource::<ZoomStateTimer>()
             .add_systems(Startup, load_cursor_assets)
             .add_systems(
                 Update,
+                create_resized_cursors.run_if(in_state(CursorLoadingState::Loading)),
+            )
+            .add_systems(
+                Update,
                 (
-                    create_resized_cursors
-                        .run_if(resource_exists_and_changed::<CursorAssetHandles>),
                     handle_zoom_cursor,
                     determine_cursor_state,
-                    apply_cursor_icon
-                        .run_if(state_changed::<CursorState>)
-                        .run_if(resource_exists::<CursorIcons>),
+                    apply_cursor_icon.run_if(in_state(CursorLoadingState::Finished)),
                 )
                     .chain(),
             );
@@ -91,7 +100,11 @@ impl Default for ZoomStateTimer {
     }
 }
 
-fn load_cursor_assets(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn load_cursor_assets(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut next_state: ResMut<NextState<CursorLoadingState>>,
+) {
     info!("[Cursor] Starting to load cursor image assets...");
     commands.insert_resource(CursorAssetHandles {
         default: asset_server.load("cursors/pointer_b.png"),
@@ -106,202 +119,92 @@ fn load_cursor_assets(mut commands: Commands, asset_server: Res<AssetServer>) {
         zoom_in: asset_server.load("cursors/zoom_in.png"),
         zoom_out: asset_server.load("cursors/zoom_out.png"),
     });
+    next_state.set(CursorLoadingState::Loading);
+}
+
+fn process_cursor_image(
+    image: &Image,
+    hotspot_xy: (u16, u16),
+    images: &mut ResMut<Assets<Image>>,
+) -> CursorIcon {
+    // 1. Resize the image
+    let resized_image = resize_image(image, 32, 32);
+    // 2. Add the resized image to the asset collection and get its new handle
+    let handle = images.add(resized_image);
+
+    // 3. Create and return the final CursorIcon
+    CursorIcon::Custom(bevy::winit::cursor::CustomCursor::Image(
+        bevy::winit::cursor::CustomCursorImage {
+            handle,
+            texture_atlas: None,
+            flip_x: false,
+            flip_y: false,
+            rect: None,
+            hotspot: hotspot_xy,
+        },
+    ))
 }
 
 fn create_resized_cursors(
     mut commands: Commands,
     handles: Res<CursorAssetHandles>,
     mut images: ResMut<Assets<Image>>,
+    mut next_state: ResMut<NextState<CursorLoadingState>>,
 ) {
     // waiting until https://github.com/bevyengine/bevy/issues/17276 is done, for now manual resize
-    if let (
-        Some(default_img),
-        Some(hover_img),
-        Some(dragging_img),
-        Some(draggable_img),
-        Some(text_img),
-        Some(zoom_in_img),
-        Some(zoom_out_img),
-        Some(resize_ew_img),
-        Some(resize_ns_img),
-        Some(resize_nesw_img),
-        Some(resize_nwse_img),
-    ) = (
-        images.get(&handles.default),
-        images.get(&handles.hover),
-        images.get(&handles.dragging),
-        images.get(&handles.draggable),
-        images.get(&handles.text),
-        images.get(&handles.zoom_in),
-        images.get(&handles.zoom_out),
-        images.get(&handles.resize_ew),
-        images.get(&handles.resize_ns),
-        images.get(&handles.resize_nesw),
-        images.get(&handles.resize_nwse),
-    ) {
-        // Resize images and create new handles
-        let default_resized = resize_image(default_img, 32, 32);
-        let hover_resized = resize_image(hover_img, 32, 32);
-        let dragging_resized = resize_image(dragging_img, 32, 32);
-        let draggable_resized = resize_image(draggable_img, 32, 32);
-        let text_resized = resize_image(text_img, 32, 32);
-        let zoom_in_resized = resize_image(zoom_in_img, 32, 32);
-        let zoom_out_resized = resize_image(zoom_out_img, 32, 32);
-        let resize_ew_resized = resize_image(resize_ew_img, 32, 32);
-        let resize_ns_resized = resize_image(resize_ns_img, 32, 32);
-        let resize_nesw_resized = resize_image(resize_nesw_img, 32, 32);
-        let resize_nwse_resized = resize_image(resize_nwse_img, 32, 32);
 
-        let default_handle = images.add(default_resized);
-        let hover_handle = images.add(hover_resized);
-        let dragging_handle = images.add(dragging_resized);
-        let draggable_handle = images.add(draggable_resized);
-        let text_handle = images.add(text_resized);
-        let zoom_in_handle = images.add(zoom_in_resized);
-        let zoom_out_handle = images.add(zoom_out_resized);
-        let resize_ew_handle = images.add(resize_ew_resized);
-        let resize_ns_handle = images.add(resize_ns_resized);
-        let resize_nesw_handle = images.add(resize_nesw_resized);
-        let resize_nwse_handle = images.add(resize_nwse_resized);
+    // Define all our cursor data in one clean place.
+    // Format: (The handle from CursorAssetHandles, (hotspot_x, hotspot_y))
+    let cursor_definitions = [
+        (&handles.default, (0, 0)),
+        (&handles.hover, (0, 0)),
+        (&handles.dragging, (0, 0)),  // Center the hotspot for grabbing
+        (&handles.draggable, (0, 0)), // Center the hotspot for grabbing
+        (&handles.text, (0, 0)),
+        (&handles.zoom_in, (8, 8)),
+        (&handles.zoom_out, (8, 8)),
+        (&handles.resize_ew, (0, 0)),
+        (&handles.resize_ns, (0, 0)),
+        (&handles.resize_nesw, (0, 0)),
+        (&handles.resize_nwse, (0, 0)),
+    ];
 
-        // Create cursor icons
-        let default_cursor = CursorIcon::Custom(bevy::winit::cursor::CustomCursor::Image(
-            bevy::winit::cursor::CustomCursorImage {
-                handle: default_handle,
-                texture_atlas: None,
-                flip_x: false,
-                flip_y: false,
-                rect: None,
-                hotspot: (0, 0),
-            },
-        ));
+    // First, check if all assets are loaded (this logic is from the state-based fix)
+    if cursor_definitions
+        .iter()
+        .all(|(handle, _)| images.get(*handle).is_some())
+    {
+        info!("[Cursor] All cursor assets are loaded. Processing now.");
 
-        let hover_cursor = CursorIcon::Custom(bevy::winit::cursor::CustomCursor::Image(
-            bevy::winit::cursor::CustomCursorImage {
-                handle: hover_handle,
-                texture_atlas: None,
-                flip_x: false,
-                flip_y: false,
-                rect: None,
-                hotspot: (0, 0),
-            },
-        ));
-
-        let dragging_cursor = CursorIcon::Custom(bevy::winit::cursor::CustomCursor::Image(
-            bevy::winit::cursor::CustomCursorImage {
-                handle: dragging_handle,
-                texture_atlas: None,
-                flip_x: false,
-                flip_y: false,
-                rect: None,
-                hotspot: (0, 0),
-            },
-        ));
-
-        let draggable_cursor = CursorIcon::Custom(bevy::winit::cursor::CustomCursor::Image(
-            bevy::winit::cursor::CustomCursorImage {
-                handle: draggable_handle,
-                texture_atlas: None,
-                flip_x: false,
-                flip_y: false,
-                rect: None,
-                hotspot: (0, 0),
-            },
-        ));
-
-        let text_cursor = CursorIcon::Custom(bevy::winit::cursor::CustomCursor::Image(
-            bevy::winit::cursor::CustomCursorImage {
-                handle: text_handle,
-                texture_atlas: None,
-                flip_x: false,
-                flip_y: false,
-                rect: None,
-                hotspot: (0, 0),
-            },
-        ));
-
-        let zoom_in_cursor = CursorIcon::Custom(bevy::winit::cursor::CustomCursor::Image(
-            bevy::winit::cursor::CustomCursorImage {
-                handle: zoom_in_handle,
-                texture_atlas: None,
-                flip_x: false,
-                flip_y: false,
-                rect: None,
-                hotspot: (8, 8),
-            },
-        ));
-        let zoom_out_cursor = CursorIcon::Custom(bevy::winit::cursor::CustomCursor::Image(
-            bevy::winit::cursor::CustomCursorImage {
-                handle: zoom_out_handle,
-                texture_atlas: None,
-                flip_x: false,
-                flip_y: false,
-                rect: None,
-                hotspot: (8, 8),
-            },
-        ));
-
-        let resize_ew_cursor = CursorIcon::Custom(bevy::winit::cursor::CustomCursor::Image(
-            bevy::winit::cursor::CustomCursorImage {
-                handle: resize_ew_handle,
-                texture_atlas: None,
-                flip_x: false,
-                flip_y: false,
-                rect: None,
-                hotspot: (0, 0),
-            },
-        ));
-
-        let resize_ns_cursor = CursorIcon::Custom(bevy::winit::cursor::CustomCursor::Image(
-            bevy::winit::cursor::CustomCursorImage {
-                handle: resize_ns_handle,
-                texture_atlas: None,
-                flip_x: false,
-                flip_y: false,
-                rect: None,
-                hotspot: (0, 0),
-            },
-        ));
-
-        let resize_nesw_cursor = CursorIcon::Custom(bevy::winit::cursor::CustomCursor::Image(
-            bevy::winit::cursor::CustomCursorImage {
-                handle: resize_nesw_handle,
-                texture_atlas: None,
-                flip_x: false,
-                flip_y: false,
-                rect: None,
-                hotspot: (0, 0),
-            },
-        ));
-        let resize_nwse_cursor = CursorIcon::Custom(bevy::winit::cursor::CustomCursor::Image(
-            bevy::winit::cursor::CustomCursorImage {
-                handle: resize_nwse_handle,
-                texture_atlas: None,
-                flip_x: false,
-                flip_y: false,
-                rect: None,
-                hotspot: (0, 0),
-            },
-        ));
-
-        // resize_ew_handle
+        // Since we know all images exist, we can now safely process them in a loop.
+        let loaded_images: Vec<Image> = cursor_definitions
+            .iter()
+            .map(|(handle, _)| images.get(*handle).unwrap().clone())
+            .collect();
+        let processed_cursors: Vec<CursorIcon> = loaded_images
+            .iter()
+            .zip(cursor_definitions.iter())
+            .map(|(image, (_, hotspot))| process_cursor_image(image, *hotspot, &mut images))
+            .collect();
 
         commands.insert_resource(CursorIcons {
-            default: default_cursor,
-            hover: hover_cursor,
-            dragging: dragging_cursor,
-            draggable: draggable_cursor,
-            text: text_cursor,
-            zoom_in: zoom_in_cursor,
-            zoom_out: zoom_out_cursor,
-            resize_ew: resize_ew_cursor,
-            resize_ns: resize_ns_cursor,
-            resize_nesw: resize_nesw_cursor,
-            resize_nwse: resize_nwse_cursor,
+            default: processed_cursors[0].clone(),
+            hover: processed_cursors[1].clone(),
+            dragging: processed_cursors[2].clone(),
+            draggable: processed_cursors[3].clone(),
+            text: processed_cursors[4].clone(),
+            zoom_in: processed_cursors[5].clone(),
+            zoom_out: processed_cursors[6].clone(),
+            resize_ew: processed_cursors[7].clone(),
+            resize_ns: processed_cursors[8].clone(),
+            resize_nesw: processed_cursors[9].clone(),
+            resize_nwse: processed_cursors[10].clone(),
         });
 
+        // Transition to the Finished state and clean up.
+        next_state.set(CursorLoadingState::Finished);
         commands.remove_resource::<CursorAssetHandles>();
-        info!("Resized cursor images created");
+        info!("Resized cursor images created and resource inserted.");
     }
 }
 
@@ -310,21 +213,19 @@ fn handle_zoom_cursor(
     mut next_state: ResMut<NextState<CursorState>>,
     mut zoom_timer: ResMut<ZoomStateTimer>,
 ) {
-    if scroll_evr.is_empty() {
-        return;
-    }
+    if !scroll_evr.is_empty() {
+        // Since we know we are scrolling, unpause and reset the timer now.
+        zoom_timer.0.unpause();
+        zoom_timer.0.reset();
 
-    // Since we're scrolling, unpause and reset the timer.
-    zoom_timer.0.unpause();
-    zoom_timer.0.reset();
+        // Use a fold to get the net scroll direction for the frame
+        let net_y = scroll_evr.read().fold(0.0, |acc, ev| acc + ev.y);
 
-    // Use a fold to get the net scroll direction for the frame
-    let net_y = scroll_evr.read().fold(0.0, |acc, ev| acc + ev.y);
-
-    if net_y > 0.0 {
-        next_state.set(CursorState::ZoomingIn);
-    } else if net_y < 0.0 {
-        next_state.set(CursorState::ZoomingOut);
+        if net_y > 0.0 {
+            next_state.set(CursorState::ZoomingIn);
+        } else if net_y < 0.0 {
+            next_state.set(CursorState::ZoomingOut);
+        }
     }
 }
 
@@ -375,17 +276,28 @@ fn determine_cursor_state(
     mut next_state: ResMut<NextState<CursorState>>,
     mut zoom_timer: ResMut<ZoomStateTimer>,
     time: Res<Time>,
+    current_cursor_state: Res<State<CursorState>>,
 ) {
-    let Ok(ctx) = egui_contexts.ctx_mut() else {
-        return;
-    };
+    let is_zooming = matches!(
+        current_cursor_state.get(),
+        CursorState::ZoomingIn | CursorState::ZoomingOut
+    );
 
-    zoom_timer.0.tick(time.delta());
-    if !zoom_timer.0.finished() {
-        // If the timer is active, we are in a "zoom" state.
-        // Do nothing and return early, preventing the logic below from overriding it.
+    if is_zooming {
+        zoom_timer.0.tick(time.delta());
+        // If the timer finishes, it's time to go back to default.
+        if zoom_timer.0.finished() {
+            info!("Finished zooming!");
+            next_state.set(CursorState::Default);
+        }
+        // If we are zooming, we don't care about any other cursor logic.
         return;
     }
+
+    let Ok(ctx) = egui_contexts.ctx_mut() else {
+        info!("Egui not yet initialized for cursor determination");
+        return;
+    };
 
     let mut new_state = CursorState::Default;
 
@@ -395,7 +307,8 @@ fn determine_cursor_state(
     }
     // Priority 2: The cursor is over an egui element.
     else if ctx.is_pointer_over_area() || ctx.is_using_pointer() {
-        new_state = CursorState::Hover;
+        return;
+        // new_state = CursorState::Hover;
     }
     // Priority 3: Check for interactions in the 3D scene.
     else {
@@ -440,27 +353,35 @@ fn determine_cursor_state(
 /// This system runs ONLY when the CursorState changes and applies the new cursor icon.
 fn apply_cursor_icon(
     mut windows: Query<Entity, With<Window>>,
-    state: Res<State<CursorState>>,
+    current_cursor_state: Res<State<CursorState>>,
     cursor_icons: Res<CursorIcons>,
     mut commands: Commands,
+    mut last_applied_state: Local<Option<CursorState>>,
 ) {
     let Ok(window_entity) = windows.single_mut() else {
         return;
     };
+    let target_state = *current_cursor_state.get();
 
-    let new_cursor = match state.get() {
-        CursorState::Default => &cursor_icons.default,
-        CursorState::Hover => &cursor_icons.hover,
-        CursorState::Dragging => &cursor_icons.dragging,
-        CursorState::Draggable => &cursor_icons.draggable,
-        CursorState::Text => &cursor_icons.text,
-        CursorState::ZoomingIn => &cursor_icons.zoom_in,
-        CursorState::ZoomingOut => &cursor_icons.zoom_out,
-        CursorState::ResizeEW => &cursor_icons.resize_ew,
-        CursorState::ResizeNS => &cursor_icons.resize_ns,
-        CursorState::ResizeNESW => &cursor_icons.resize_nesw,
-        CursorState::ResizeNWSE => &cursor_icons.resize_nwse,
-    };
+    if last_applied_state.is_none() || *last_applied_state.as_ref().unwrap() != target_state {
+        let new_cursor_icon = match target_state {
+            CursorState::Default => &cursor_icons.default,
+            CursorState::Hover => &cursor_icons.hover,
+            CursorState::Dragging => &cursor_icons.dragging,
+            CursorState::Draggable => &cursor_icons.draggable,
+            CursorState::Text => &cursor_icons.text,
+            CursorState::ZoomingIn => &cursor_icons.zoom_in,
+            CursorState::ZoomingOut => &cursor_icons.zoom_out,
+            CursorState::ResizeEW => &cursor_icons.resize_ew,
+            CursorState::ResizeNS => &cursor_icons.resize_ns,
+            CursorState::ResizeNESW => &cursor_icons.resize_nesw,
+            CursorState::ResizeNWSE => &cursor_icons.resize_nwse,
+        };
 
-    commands.entity(window_entity).insert(new_cursor.clone());
+        commands
+            .entity(window_entity)
+            .insert(new_cursor_icon.clone());
+        *last_applied_state = Some(target_state);
+        info!("CURSOR: Applied state {:?}", target_state); // Optional debug log
+    }
 }

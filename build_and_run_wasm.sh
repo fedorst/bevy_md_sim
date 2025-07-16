@@ -42,6 +42,12 @@ cat > static/index.html <<- EOM
     return window.localStorage.getItem(SAVE_TIMESTAMP_KEY);
     }
     </script>
+    <script>
+      const canvas = document.getElementById('bevy');
+      canvas.addEventListener('contextmenu', (event) => {
+        event.preventDefault();
+      });
+    </script>
     <script type="module">
       import init from './molecular_dynamics.js';
       init();
