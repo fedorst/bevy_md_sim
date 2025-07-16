@@ -28,22 +28,16 @@ cat > static/index.html <<- EOM
   <body>
     <canvas id="bevy"></canvas>
     <script>
-    // The new key for our timestamp
     const SAVE_TIMESTAMP_KEY = "simulation_save_timestamp";
-
     function js_save_to_localstorage(key, value) {
     console.log(`JS: Saving state to localStorage with key "${key}"`);
     window.localStorage.setItem(key, value);
-    // Also save the current timestamp as an ISO 8601 string
     window.localStorage.setItem(SAVE_TIMESTAMP_KEY, new Date().toISOString());
     }
-
     function js_load_from_localstorage(key) {
     console.log(`JS: Loading state from localStorage with key "${key}"`);
     return window.localStorage.getItem(key);
     }
-
-    // A new function to get just the timestamp
     function js_get_save_timestamp() {
     return window.localStorage.getItem(SAVE_TIMESTAMP_KEY);
     }
