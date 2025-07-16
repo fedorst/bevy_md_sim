@@ -1,4 +1,5 @@
 use crate::AppState;
+use crate::CliArgs;
 use crate::components::{Acceleration, Atom, Constraint, Force, Velocity};
 use crate::resources::*;
 use bevy::prelude::*;
@@ -30,6 +31,22 @@ impl Plugin for SimulationPlugin {
                 .chain()
                 .in_set(PhysicsSet)
                 .run_if(in_state(AppState::Running)),
+        );
+        app.add_systems(
+            Update,
+            (
+                reset_forces,
+                reset_energy,
+                calculate_bond_and_constraint_forces,
+                calculate_angle_forces,
+                calculate_dihedral_forces,
+                calculate_non_bonded_forces,
+                sum_total_forces,
+                log_initial_state_and_pause, // We do NOT integrate, we just calculate forces
+                                             // run_one_pre_simulation_tick, // This system transitions us out of PreSimulation
+            )
+                .chain()
+                .run_if(in_state(AppState::PreSimulation)),
         );
     }
 }
@@ -347,6 +364,51 @@ fn calculate_angle_forces(
             energy.potential += 0.5 * angle_k * (theta - angle_theta0).powi(2);
         }
     }
+}
+
+fn run_one_pre_simulation_tick(
+    mut commands: Commands,
+    mut next_state: ResMut<NextState<AppState>>,
+    cli: Res<CliArgs>, // We need to re-add CliArgs to this system
+) {
+    info!("Running one pre-simulation physics tick to calculate initial forces.");
+
+    if cli.paused {
+        next_state.set(AppState::Paused);
+    } else {
+        next_state.set(AppState::Running);
+    }
+    commands.remove_resource::<CliArgs>();
+}
+
+fn log_initial_state_and_pause(
+    mut next_state: ResMut<NextState<AppState>>,
+    atom_query: Query<(Entity, &Transform, &Velocity, &Force), With<Atom>>,
+) {
+    info!("--- INITIAL STATE LOG ---");
+    info!("Atom Count: {}", atom_query.iter().len());
+    for (entity, transform, velocity, force) in &atom_query {
+        info!(
+            "  Entity: {:?}, Pos: {:?}, Vel: {:?}, Force: {:?}",
+            entity, transform.translation, velocity.0, force.total
+        );
+
+        // Check for non-finite numbers which cause explosions
+        if !transform.translation.is_finite() {
+            error!("!!! NON-FINITE POSITION on Entity {:?}", entity);
+        }
+        if !velocity.0.is_finite() {
+            error!("!!! NON-FINITE VELOCITY on Entity {:?}", entity);
+        }
+        if !force.total.is_finite() {
+            error!("!!! NON-FINITE FORCE on Entity {:?}", entity);
+        }
+    }
+    info!("--- END INITIAL STATE LOG ---");
+    info!("Pausing simulation for inspection.");
+
+    // Force the app to pause so we can read the logs.
+    next_state.set(AppState::Paused);
 }
 
 fn calculate_bond_and_constraint_forces(

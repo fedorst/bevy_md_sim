@@ -47,6 +47,7 @@ impl Plugin for SpawningPlugin {
             .add_systems(
                 Update,
                 (
+                    trigger_molecule_generation,
                     trigger_smiles_validation,
                     handle_validation_result,
                     trigger_molecule_generation,
@@ -61,6 +62,8 @@ impl Plugin for SpawningPlugin {
                     handle_despawn_solvent_event.run_if(on_event::<DespawnSolventEvent>),
                 ),
             );
+        #[cfg(target_arch = "wasm32")]
+        app.add_systems(Update, handle_molecule_generation_task);
     }
 }
 
@@ -274,6 +277,7 @@ fn handle_validation_result(
 }
 
 // System 1: Listens for external requests and runs the Python script.
+#[cfg(not(target_arch = "wasm32"))]
 fn trigger_molecule_generation(
     mut spawn_events: EventReader<SpawnMoleculeFromSMILESEvent>,
     mut writer: EventWriter<SpawnMoleculeFromJsonEvent>,
@@ -308,6 +312,60 @@ fn trigger_molecule_generation(
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+fn trigger_molecule_generation(
+    mut commands: Commands,
+    mut spawn_events: ResMut<Events<SpawnMoleculeFromSMILESEvent>>,
+) {
+    for event in spawn_events.drain() {
+        let smiles = event.0.clone();
+        let grid_info = event.1;
+
+        let task = AsyncComputeTaskPool::get().spawn(async move {
+            let api_url = "https://md.fedor.ee/api/generate_molecule";
+
+            let client = reqwest::Client::new();
+            let response = client
+                .post(api_url)
+                .json(&serde_json::json!({ "smiles": smiles }))
+                .send()
+                .await;
+
+            match response {
+                Ok(res) if res.status().is_success() => match res.text().await {
+                    Ok(text) => Some(SpawnMoleculeFromJsonEvent(text, grid_info)),
+                    Err(_) => None,
+                },
+                _ => None,
+            }
+        });
+
+        // We need a component to hold the task and a system to poll it
+        commands.spawn(MoleculeGenerationTask(task));
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Component)]
+struct MoleculeGenerationTask(Task<Option<SpawnMoleculeFromJsonEvent>>);
+
+#[cfg(target_arch = "wasm32")]
+fn handle_molecule_generation_task(
+    mut commands: Commands,
+    mut tasks: Query<(Entity, &mut MoleculeGenerationTask)>,
+    mut writer: EventWriter<SpawnMoleculeFromJsonEvent>,
+) {
+    for (entity, mut task) in &mut tasks {
+        if let Some(Some(event)) =
+            futures_lite::future::block_on(futures_lite::future::poll_once(&mut task.0))
+        {
+            info!(">>> [ASYNC_HANDLER] Task finished. Firing SpawnMoleculeFromJsonEvent.");
+            writer.write(event);
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
 // System 2: Clears the board for the new molecule.
 fn despawn_previous_molecule(
     mut commands: Commands,
@@ -337,6 +395,7 @@ fn spawn_molecules_from_json(
     mut rebuild_writer: EventWriter<RebuildConnectivityEvent>,
 ) {
     for event in events.read() {
+        info!(">>> [SPAWNER] Saw SpawnMoleculeFromJsonEvent. Spawning molecule NOW.");
         let config: MoleculeConfig = match serde_json::from_str(&event.0) {
             Ok(c) => c,
             Err(e) => {

@@ -128,22 +128,23 @@ fn pause_menu_egui_system(
                     spawn_writer.write(SpawnSolventEvent);
                 }
             }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                ui.add_space(10.0);
+                ui.separator();
+                ui.add_space(10.0);
 
-            ui.add_space(10.0);
-            ui.separator();
-            ui.add_space(10.0);
-
-            ui.horizontal(|ui| {
-                if ui.button("Save State").clicked() {
-                    save_state_writer.write(SaveStateEvent(SAVE_FILE_PATH.to_string()));
-                }
-                if ui.button("Load State").clicked() {
-                    load_state_writer.write(LoadStateEvent(SAVE_FILE_PATH.to_string()));
-                }
-            });
-            ui.add_space(2.0);
-            ui.label(&last_save_time.display_text);
-
+                ui.horizontal(|ui| {
+                    if ui.button("Save State").clicked() {
+                        save_state_writer.write(SaveStateEvent(SAVE_FILE_PATH.to_string()));
+                    }
+                    if ui.button("Load State").clicked() {
+                        load_state_writer.write(LoadStateEvent(SAVE_FILE_PATH.to_string()));
+                    }
+                });
+                ui.add_space(2.0);
+                ui.label(&last_save_time.display_text);
+            }
             ui.add_space(10.0);
             ui.separator();
 

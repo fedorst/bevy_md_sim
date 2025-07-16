@@ -47,6 +47,6 @@ fn setup_shared_assets(
 }
 
 fn trigger_initial_molecule_spawn(mut spawn_writer: EventWriter<SpawnMoleculeFromSMILESEvent>) {
-    info!("Sending initial spawn event for a single ethanol molecule.");
+    info!(">>> [SETUP] Firing initial SpawnMoleculeFromSMILESEvent(CCO)");
     spawn_writer.write(SpawnMoleculeFromSMILESEvent("CCO".to_string(), None));
 }

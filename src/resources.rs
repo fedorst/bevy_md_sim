@@ -185,6 +185,67 @@ pub struct ForceField {
 }
 
 impl ForceField {
+    pub fn from_json_string(json_string: &str) -> Self {
+        let ff_file: ForceFieldFile =
+            serde_json::from_str(json_string).expect("Failed to parse force field JSON string");
+
+        let mut bond_params = HashMap::new();
+        for p in ff_file.bonds {
+            let order = match p.order.as_str() {
+                "Double" => BondOrder::Double,
+                "Triple" => BondOrder::Triple,
+                "Aromatic" => BondOrder::Aromatic,
+                _ => BondOrder::Single,
+            };
+            bond_params.insert((p.types[0].clone(), p.types[1].clone(), order), (p.k, p.r0));
+            bond_params.insert((p.types[1].clone(), p.types[0].clone(), order), (p.k, p.r0));
+        }
+
+        let mut angle_params = HashMap::new();
+        for p in ff_file.angles {
+            let theta_rad = p.theta0_deg.to_radians();
+            angle_params.insert(
+                (p.types[0].clone(), p.types[1].clone(), p.types[2].clone()),
+                (p.k, theta_rad),
+            );
+            angle_params.insert(
+                (p.types[2].clone(), p.types[1].clone(), p.types[0].clone()),
+                (p.k, theta_rad),
+            );
+        }
+
+        let mut dihedral_params = HashMap::new();
+        for p in ff_file.dihedrals {
+            let phi0_rad = p.phi0_deg.to_radians();
+            dihedral_params.insert(
+                (
+                    p.types[0].clone(),
+                    p.types[1].clone(),
+                    p.types[2].clone(),
+                    p.types[3].clone(),
+                ),
+                (p.k, p.n, phi0_rad),
+            );
+            dihedral_params.insert(
+                (
+                    p.types[3].clone(),
+                    p.types[2].clone(),
+                    p.types[1].clone(),
+                    p.types[0].clone(),
+                ),
+                (p.k, p.n, phi0_rad),
+            );
+        }
+
+        Self {
+            atom_types: ff_file.atom_types,
+            bond_params,
+            angle_params,
+            dihedral_params,
+            coulomb_k: 138.935458,
+        }
+    }
+
     pub fn from_file(path: &str) -> Self {
         let file_contents = std::fs::read_to_string(path)
             .unwrap_or_else(|_| panic!("Failed to read force field file at {}", path));

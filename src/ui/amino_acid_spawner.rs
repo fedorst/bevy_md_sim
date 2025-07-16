@@ -16,6 +16,10 @@ impl Plugin for AminoAcidSpawnerPlugin {
 
 // On startup, load the amino acid definitions from the JSON file.
 fn setup_amino_acid_info(mut commands: Commands) {
+    #[cfg(target_arch = "wasm32")]
+    let file_contents = include_str!("../../assets/amino_acids.json");
+
+    #[cfg(not(target_arch = "wasm32"))]
     let file_contents = std::fs::read_to_string("assets/amino_acids.json")
         .expect("Failed to read amino_acids.json");
 

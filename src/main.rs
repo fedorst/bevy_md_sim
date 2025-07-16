@@ -9,8 +9,8 @@ mod simulation;
 mod spawning;
 mod spawning_utils;
 mod ui;
-mod visualization; // ADD THIS LINE
-
+mod visualization;
+use bevy::audio::AudioPlugin;
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
 use bevy_panorbit_camera::PanOrbitCameraPlugin;
@@ -28,7 +28,8 @@ use visualization::VisualizationPlugin;
 #[derive(States, Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub enum AppState {
     #[default]
-    Initializing, // Start here to allow setup systems to run.
+    Initializing,
+    PreSimulation,
     Running,
     Paused,
 }
@@ -61,14 +62,20 @@ pub struct CorePlugin;
 
 impl Plugin for CorePlugin {
     fn build(&self, app: &mut App) {
-        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-        let ff_path = std::path::Path::new(&manifest_dir)
-            .join("assets/force_field.json")
-            .to_str()
-            .unwrap()
-            .to_string();
+        #[cfg(not(target_arch = "wasm32"))]
+        let force_field_json = {
+            let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+            let ff_path = std::path::Path::new(&manifest_dir)
+                .join("assets/force_field.json")
+                .to_str()
+                .unwrap()
+                .to_string();
+            std::fs::read_to_string(ff_path).unwrap()
+        };
+        #[cfg(target_arch = "wasm32")]
+        let force_field_json = include_str!("../assets/force_field.json").to_string();
 
-        app.insert_resource(ForceField::from_file(&ff_path))
+        app.insert_resource(ForceField::from_json_string(&force_field_json))
             .insert_resource::<ForceMultiplier>(ForceMultiplier(1.0))
             .init_resource::<SystemConnectivity>()
             .init_resource::<StepCount>()
@@ -87,21 +94,12 @@ impl Plugin for CorePlugin {
 }
 
 fn check_initialization_complete(
-    mut commands: Commands,
-    cli: Res<CliArgs>,
-    // This system runs when a RebuildConnectivityEvent is sent, which is our signal that setup is done.
     mut rebuild_reader: EventReader<RebuildConnectivityEvent>,
     mut next_state: ResMut<NextState<AppState>>,
 ) {
     if rebuild_reader.read().last().is_some() {
-        info!("Initialization complete. Transitioning to target state.");
-        if cli.paused {
-            next_state.set(AppState::Paused);
-        } else {
-            next_state.set(AppState::Running);
-        }
-        // This system has done its job, so we despawn it.
-        commands.remove_resource::<CliArgs>();
+        info!("Initialization complete. Transitioning to PreSimulation state.");
+        next_state.set(AppState::PreSimulation);
     }
 }
 
@@ -119,8 +117,22 @@ fn main() {
     let args = CliArgs::parse();
     info!("CLI arguments parsed. Loading molecule: {}", args.molecule);
 
-    App::new()
-        .add_plugins(DefaultPlugins)
+    let mut app = App::new();
+
+    let default_plugins = DefaultPlugins.set(WindowPlugin {
+        primary_window: Some(Window {
+            title: "Molecular Dynamics".into(),
+            canvas: Some("#bevy".to_string()),
+            prevent_default_event_handling: false,
+            ..default()
+        }),
+        ..default()
+    });
+
+    #[cfg(target_arch = "wasm32")]
+    let default_plugins = default_plugins.build().disable::<AudioPlugin>();
+
+    app.add_plugins(default_plugins)
         .init_state::<AppState>()
         .insert_resource(SimulationParameters { dt: args.dt })
         .insert_resource(Thermostat {

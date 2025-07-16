@@ -15,15 +15,17 @@ pub const SAVE_FILE_PATH: &str = "simulation_state.json";
 impl Plugin for PersistencePlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<SaveStateEvent>()
-            .add_event::<LoadStateEvent>()
-            .add_systems(
-                Update,
-                (
-                    save_state_on_event,
-                    load_state_on_event,
-                    update_save_time_display,
-                ),
-            );
+            .add_event::<LoadStateEvent>();
+
+        #[cfg(not(target_arch = "wasm32"))]
+        app.add_systems(
+            Update,
+            (
+                save_state_on_event,
+                load_state_on_event,
+                update_save_time_display,
+            ),
+        );
     }
 }
 
