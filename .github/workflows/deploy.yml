@@ -66,7 +66,7 @@ jobs:
           username: fedor
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: "./static/*" # Copy contents of static folder
-          target: "/var/www/md.fedor.ee"
+          target: "/var/www/md.fedor.ee/"
 
   # --- JOB 2: Deploy the API Backend ---
   deploy-api:
