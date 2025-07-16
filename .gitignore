@@ -1,4 +1,5 @@
 /target
+/static
 .zed
 __pycache__
 .venv

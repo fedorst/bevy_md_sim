@@ -9,7 +9,11 @@ use crate::spawning_utils::get_atom_visuals;
 use bevy::prelude::*;
 use bevy::tasks::{AsyncComputeTaskPool, Task};
 use futures_lite::future;
+use rand::Rng;
 use std::collections::{HashMap, HashSet};
+
+#[derive(Event, Debug)]
+pub struct ClearAllMoleculesEvent;
 
 /// An event sent to request a new molecule from a SMILES string.
 #[derive(Event, Debug)]
@@ -29,7 +33,7 @@ pub struct SMILESValidationResult(pub Result<(), String>);
 
 /// An event sent when the python script succeeds, containing the molecule JSON.
 #[derive(Event, Debug)]
-struct SpawnMoleculeFromJsonEvent(String, Option<IVec3>);
+pub struct SpawnMoleculeFromJsonEvent(pub String, pub Option<IVec3>);
 
 #[derive(Component)]
 struct ValidationTask(Option<Task<SMILESValidationResult>>);
@@ -38,7 +42,8 @@ pub struct SpawningPlugin;
 
 impl Plugin for SpawningPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<SpawnSolventEvent>()
+        app.add_event::<ClearAllMoleculesEvent>()
+            .add_event::<SpawnSolventEvent>()
             .add_event::<DespawnSolventEvent>()
             .add_event::<SpawnMoleculeFromSMILESEvent>()
             .add_event::<ValidateSMILESEvent>()
@@ -50,14 +55,8 @@ impl Plugin for SpawningPlugin {
                     trigger_molecule_generation,
                     trigger_smiles_validation,
                     handle_validation_result,
-                    trigger_molecule_generation,
-                    (
-                        despawn_previous_molecule,
-                        ApplyDeferred,
-                        spawn_molecules_from_json,
-                    )
-                        .chain()
-                        .run_if(on_event::<SpawnMoleculeFromJsonEvent>),
+                    clear_all_molecules_on_event,
+                    spawn_molecules_from_json.run_if(on_event::<SpawnMoleculeFromJsonEvent>),
                     handle_spawn_solvent_event.run_if(on_event::<SpawnSolventEvent>),
                     handle_despawn_solvent_event.run_if(on_event::<DespawnSolventEvent>),
                 ),
@@ -65,6 +64,28 @@ impl Plugin for SpawningPlugin {
         #[cfg(target_arch = "wasm32")]
         app.add_systems(Update, handle_molecule_generation_task);
     }
+}
+
+fn clear_all_molecules_on_event(
+    mut commands: Commands,
+    mut events: EventReader<ClearAllMoleculesEvent>,
+    mut connectivity: ResMut<SystemConnectivity>,
+    mut atom_id_map: ResMut<AtomIdMap>,
+    bond_vis_query: Query<Entity, With<BondVisualization>>,
+    molecule_query: Query<Entity, With<Molecule>>,
+) {
+    if events.read().last().is_none() {
+        return;
+    }
+    info!("Clearing all molecules from the simulation.");
+    for entity in &molecule_query {
+        commands.entity(entity).despawn();
+    }
+    for entity in &bond_vis_query {
+        commands.entity(entity).despawn();
+    }
+    *connectivity = SystemConnectivity::default();
+    *atom_id_map = AtomIdMap::default();
 }
 
 fn handle_spawn_solvent_event(
@@ -366,24 +387,6 @@ fn handle_molecule_generation_task(
     }
 }
 
-// System 2: Clears the board for the new molecule.
-fn despawn_previous_molecule(
-    mut commands: Commands,
-    mut connectivity: ResMut<SystemConnectivity>,
-    mut atom_id_map: ResMut<AtomIdMap>,
-    bond_vis_query: Query<Entity, With<BondVisualization>>,
-    molecule_query: Query<Entity, With<Molecule>>,
-) {
-    for entity in &molecule_query {
-        commands.entity(entity).despawn();
-    }
-    for entity in &bond_vis_query {
-        commands.entity(entity).despawn();
-    }
-    *connectivity = SystemConnectivity::default();
-    *atom_id_map = AtomIdMap::default();
-}
-
 // System 3: Spawns the new molecule from the generated JSON.
 fn spawn_molecules_from_json(
     mut events: EventReader<SpawnMoleculeFromJsonEvent>,
@@ -393,6 +396,7 @@ fn spawn_molecules_from_json(
     mut connectivity: ResMut<SystemConnectivity>,
     mut atom_id_map: ResMut<AtomIdMap>,
     mut rebuild_writer: EventWriter<RebuildConnectivityEvent>,
+    existing_atoms: Query<&Transform, With<Atom>>,
 ) {
     for event in events.read() {
         info!(">>> [SPAWNER] Saw SpawnMoleculeFromJsonEvent. Spawning molecule NOW.");
@@ -403,6 +407,42 @@ fn spawn_molecules_from_json(
                 continue;
             }
         };
+
+        let mut offset = Vec3::ZERO;
+        if !existing_atoms.is_empty() {
+            // 1. Find the center of the new molecule we are about to spawn
+            let mut new_molecule_center = Vec3::ZERO;
+            for atom_spec in &config.atoms {
+                new_molecule_center += Vec3::from(atom_spec.pos);
+            }
+            new_molecule_center /= config.atoms.len() as f32;
+
+            // 2. Find the bounding box of all existing atoms
+            let mut min_bound = Vec3::splat(f32::MAX);
+            let mut max_bound = Vec3::splat(f32::MIN);
+            for transform in &existing_atoms {
+                min_bound = min_bound.min(transform.translation);
+                max_bound = max_bound.max(transform.translation);
+            }
+            let existing_size = (max_bound - min_bound).length();
+
+            // 3. Create an offset vector along a random axis
+            let mut rng = rand::rng();
+            let mut random_axis = Vec3::ZERO;
+            match rng.random_range(0..6) {
+                0 => random_axis.x = 1.0,
+                1 => random_axis.y = 1.0,
+                2 => random_axis.z = 1.0,
+                3 => random_axis.x = -1.0,
+                4 => random_axis.y = -1.0,
+                _ => random_axis.z = -1.0,
+            };
+
+            // The offset is the size of the existing system, plus a buffer,
+            // translated away from the center of the new molecule.
+            offset = (random_axis * (existing_size + 0.3)) - new_molecule_center;
+        }
+
         let grid_size = event.1.unwrap_or(IVec3::ONE);
         let spacing = if event.1.is_some() { 1.2 } else { 2.4 };
         let box_size = if event.1.is_some() {
@@ -440,7 +480,7 @@ fn spawn_molecules_from_json(
                         Acceleration(Vec3::ZERO),
                         Mesh3d(meshes.add(Sphere::new(radius))),
                         MeshMaterial3d(materials.add(color)),
-                        Transform::from_translation(Vec3::from(atom_spec.pos)),
+                        Transform::from_translation(Vec3::from(atom_spec.pos) + offset),
                     ))
                     .id();
                 id_to_entity_map.insert(atom_spec.id.clone(), entity);

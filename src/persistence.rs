@@ -3,14 +3,206 @@
 use crate::components::{Acceleration, Atom, Force, Molecule, Velocity};
 use crate::interaction::RebuildConnectivityEvent;
 use crate::resources::{AtomIdMap, Bond, BondOrder, LastSaveTime, SystemConnectivity};
+#[cfg(target_arch = "wasm32")]
+use crate::spawning::SpawnMoleculeFromJsonEvent;
 use crate::spawning_utils::get_atom_visuals;
 use bevy::prelude::*; // Make sure Time is imported
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
 
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+extern "C" {
+    fn js_save_to_localstorage(key: &str, value: &str);
+    fn js_load_from_localstorage(key: &str) -> Option<String>;
+    fn js_get_save_timestamp() -> Option<String>;
+}
+
+const SAVE_FILE_PATH: &str = "simulation_state.json";
+const LOCALSTORAGE_KEY: &str = "md_simulation_save_state";
+
+fn create_save_state(
+    atom_query: &Query<(&Atom, &Transform, &Velocity, Entity)>,
+    connectivity: &Res<SystemConnectivity>,
+    atom_id_map: &Res<AtomIdMap>,
+) -> SimulationSaveState {
+    info!("Serializing simulation state...");
+
+    let atom_states: Vec<AtomState> = atom_query
+        .iter()
+        .filter_map(|(atom, transform, velocity, entity)| {
+            atom_id_map.entity_to_id.get(&entity).map(|id| {
+                let element = atom.type_name.chars().next().unwrap_or('?').to_string();
+                AtomState {
+                    id: id.clone(),
+                    type_name: atom.type_name.clone(),
+                    element,
+                    position: transform.translation.to_array(),
+                    velocity: velocity.0.to_array(),
+                }
+            })
+        })
+        .collect();
+
+    let saved_bonds: Vec<SavedBond> = connectivity
+        .bonds
+        .iter()
+        .filter_map(|bond| {
+            let id1 = atom_id_map.entity_to_id.get(&bond.a)?;
+            let id2 = atom_id_map.entity_to_id.get(&bond.b)?;
+            Some(SavedBond {
+                atom_ids: [id1.clone(), id2.clone()],
+                order: bond.order,
+            })
+        })
+        .collect();
+
+    SimulationSaveState {
+        atoms: atom_states,
+        bonds: saved_bonds,
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn save_state_to_localstorage_on_event(
+    mut events: EventReader<SaveStateEvent>,
+    atom_query: Query<(&Atom, &Transform, &Velocity, Entity)>,
+    connectivity: Res<SystemConnectivity>,
+    atom_id_map: Res<AtomIdMap>,
+) {
+    if events.read().last().is_none() {
+        return;
+    }
+
+    let save_state = create_save_state(&atom_query, &connectivity, &atom_id_map);
+
+    match serde_json::to_string(&save_state) {
+        Ok(json_string) => {
+            js_save_to_localstorage(LOCALSTORAGE_KEY, &json_string);
+            info!("Successfully saved state to LocalStorage.");
+        }
+        Err(e) => error!("Failed to serialize state for LocalStorage: {}", e),
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn load_state_from_localstorage(
+    mut commands: Commands,
+    mut load_events: EventReader<LoadStateEvent>,
+    mut connectivity: ResMut<SystemConnectivity>,
+    mut atom_id_map: ResMut<AtomIdMap>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut rebuild_writer: EventWriter<RebuildConnectivityEvent>,
+    molecule_query: Query<Entity, With<Molecule>>,
+) {
+    if load_events.read().last().is_none() {
+        return;
+    }
+
+    info!("[LOAD] Attempting to load state from LocalStorage.");
+    if let Some(json_string) = js_load_from_localstorage(LOCALSTORAGE_KEY) {
+        let Ok(save_state) = serde_json::from_str::<SimulationSaveState>(&json_string) else {
+            error!("[LOAD] Failed to deserialize save state from LocalStorage.");
+            return;
+        };
+
+        // 1. Clear the stage.
+        for entity in &molecule_query {
+            commands.entity(entity).despawn();
+        }
+        *connectivity = SystemConnectivity::default();
+        *atom_id_map = AtomIdMap::default();
+
+        // 2. Spawn atoms from the save state using the correct 0.16 component tuple syntax.
+        let mut id_to_entity_map = HashMap::new();
+
+        commands
+            .spawn((
+                Molecule,
+                Name::new("Loaded Molecule"),
+                (
+                    Transform::default(),
+                    GlobalTransform::default(),
+                    Visibility::default(),
+                    InheritedVisibility::default(),
+                    ViewVisibility::default(),
+                ),
+            ))
+            .with_children(|parent| {
+                for atom_state in &save_state.atoms {
+                    let (radius, color) = get_atom_visuals(&atom_state.element);
+                    let entity = parent
+                        .spawn((
+                            Atom {
+                                type_name: atom_state.type_name.clone(),
+                            },
+                            Force::default(),
+                            Velocity(Vec3::from(atom_state.position)),
+                            Acceleration(Vec3::ZERO),
+                            Mesh3d(meshes.add(Sphere::new(radius))),
+                            MeshMaterial3d(materials.add(color)),
+                            Transform::from_translation(Vec3::from(atom_state.position)),
+                        ))
+                        .id();
+                    id_to_entity_map.insert(atom_state.id.clone(), entity);
+                    atom_id_map
+                        .entity_to_id
+                        .insert(entity, atom_state.id.clone());
+                }
+            });
+
+        // 3. Rebuild bond connectivity
+        for saved_bond in &save_state.bonds {
+            let (Some(entity1), Some(entity2)) = (
+                id_to_entity_map.get(&saved_bond.atom_ids[0]),
+                id_to_entity_map.get(&saved_bond.atom_ids[1]),
+            ) else {
+                continue;
+            };
+            connectivity.bonds.push(Bond {
+                a: *entity1,
+                b: *entity2,
+                order: saved_bond.order,
+            });
+        }
+
+        // 4. Trigger a full rebuild of visuals
+        rebuild_writer.write(RebuildConnectivityEvent);
+        info!("[LOAD] Successfully loaded and spawned state from LocalStorage.");
+    } else {
+        warn!("[LOAD] No save data found in LocalStorage.");
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn update_save_time_display_wasm(
+    mut last_save_time: ResMut<LastSaveTime>,
+    time: Res<Time>,
+    mut timer: Local<Timer>,
+) {
+    timer.set_duration(Duration::from_secs(2)); // Check every 2 seconds
+    timer.tick(time.delta());
+
+    if !timer.finished() {
+        return;
+    }
+
+    if let Some(timestamp_str) = js_get_save_timestamp() {
+        // Here we would parse the ISO string and format it nicely.
+        // For now, a simple display is fine.
+        // A proper implementation would use a chrono-like library.
+        last_save_time.display_text = format!("Last save: {}", &timestamp_str[11..19]);
+    } else {
+        last_save_time.display_text = "No save file".to_string();
+    }
+}
+
 pub struct PersistencePlugin;
-pub const SAVE_FILE_PATH: &str = "simulation_state.json";
 
 impl Plugin for PersistencePlugin {
     fn build(&self, app: &mut App) {
@@ -21,9 +213,20 @@ impl Plugin for PersistencePlugin {
         app.add_systems(
             Update,
             (
-                save_state_on_event,
-                load_state_on_event,
+                save_state_to_file_on_event,
+                load_state_from_file_on_event,
                 update_save_time_display,
+            ),
+        );
+
+        // Systems for web LocalStorage-based persistence
+        #[cfg(target_arch = "wasm32")]
+        app.add_systems(
+            Update,
+            (
+                save_state_to_localstorage_on_event,
+                load_state_from_localstorage,
+                update_save_time_display_wasm,
             ),
         );
     }
@@ -31,10 +234,10 @@ impl Plugin for PersistencePlugin {
 
 // --- Events ---
 #[derive(Event)]
-pub struct SaveStateEvent(pub String); // Carries the filepath
+pub struct SaveStateEvent;
 
 #[derive(Event)]
-pub struct LoadStateEvent(pub String); // Carries the filepath
+pub struct LoadStateEvent;
 
 // --- Data Structures for Serialization
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -60,72 +263,32 @@ pub struct SavedBond {
 
 // --- Systems ---
 
-fn save_state_on_event(
+#[cfg(not(target_arch = "wasm32"))]
+fn save_state_to_file_on_event(
     mut events: EventReader<SaveStateEvent>,
     atom_query: Query<(&Atom, &Transform, &Velocity, Entity)>,
     connectivity: Res<SystemConnectivity>,
     atom_id_map: Res<AtomIdMap>,
 ) {
-    if let Some(event) = events.read().last() {
-        let filepath = &event.0;
-        info!("[SAVE] Save event received for '{}'.", filepath);
+    if events.read().last().is_none() {
+        return;
+    }
 
-        // 1. Convert atoms to serializable state.
-        let atom_states: Vec<AtomState> = atom_query
-            .iter()
-            .filter_map(|(atom, transform, velocity, entity)| {
-                atom_id_map.entity_to_id.get(&entity).map(|id| {
-                    let element = atom.type_name.chars().next().unwrap_or('?').to_string();
-                    AtomState {
-                        id: id.clone(),
-                        type_name: atom.type_name.clone(),
-                        element,
-                        position: transform.translation.to_array(),
-                        velocity: velocity.0.to_array(),
-                    }
-                })
-            })
-            .collect();
-        info!("[SAVE] Found and serialized {} atoms.", atom_states.len());
+    let save_state = create_save_state(&atom_query, &connectivity, &atom_id_map);
 
-        // 2. Convert bonds to serializable state.
-        let saved_bonds: Vec<SavedBond> = connectivity
-            .bonds
-            .iter()
-            .filter_map(|bond| {
-                let Some(id1) = atom_id_map.entity_to_id.get(&bond.a) else {
-                    return None;
-                };
-                let Some(id2) = atom_id_map.entity_to_id.get(&bond.b) else {
-                    return None;
-                };
-                Some(SavedBond {
-                    atom_ids: [id1.clone(), id2.clone()],
-                    order: bond.order,
-                })
-            })
-            .collect();
-        info!("[SAVE] Found and serialized {} bonds.", saved_bonds.len());
-
-        let save_state = SimulationSaveState {
-            atoms: atom_states,
-            bonds: saved_bonds,
-        };
-
-        match serde_json::to_string_pretty(&save_state) {
-            Ok(json_string) => {
-                if let Err(e) = std::fs::write(filepath, json_string) {
-                    error!("[SAVE] FAILED to write save file: {}", e);
-                } else {
-                    info!("[SAVE] Successfully wrote state to {}.", filepath);
-                }
+    match serde_json::to_string_pretty(&save_state) {
+        Ok(json_string) => {
+            if let Err(e) = std::fs::write(SAVE_FILE_PATH, json_string) {
+                error!("[SAVE] FAILED to write save file: {}", e);
+            } else {
+                info!("[SAVE] Successfully wrote state to {}.", SAVE_FILE_PATH);
             }
-            Err(e) => error!("[SAVE] FAILED to serialize save state: {}", e),
         }
+        Err(e) => error!("[SAVE] FAILED to serialize save state: {}", e),
     }
 }
 
-fn load_state_on_event(
+fn load_state_from_file_on_event(
     mut events: EventReader<LoadStateEvent>,
     mut commands: Commands,
     mut connectivity: ResMut<SystemConnectivity>,
@@ -135,16 +298,16 @@ fn load_state_on_event(
     mut rebuild_writer: EventWriter<RebuildConnectivityEvent>,
     molecule_query: Query<Entity, With<Molecule>>,
 ) {
-    if let Some(event) = events.read().last() {
-        let filepath = &event.0;
-        info!("[LOAD] Load event received for '{}'.", filepath);
-
-        let Ok(json_string) = std::fs::read_to_string(filepath) else {
-            error!("[LOAD] FAILED to read save file: {}", filepath);
+    if let Some(_event) = events.read().last() {
+        let Ok(json_string) = std::fs::read_to_string(SAVE_FILE_PATH) else {
+            error!("[LOAD] FAILED to read save file: {}", SAVE_FILE_PATH);
             return;
         };
         let Ok(save_state) = serde_json::from_str::<SimulationSaveState>(&json_string) else {
-            error!("[LOAD] FAILED to deserialize save state from {}", filepath);
+            error!(
+                "[LOAD] FAILED to deserialize save state from {}",
+                SAVE_FILE_PATH
+            );
             return;
         };
         info!(

@@ -1,4 +1,4 @@
-// src/ui/peptide_builder.rs
+// src/ui/amino_acid_spawner.rs
 
 use crate::resources::{AminoAcidFile, AminoAcidInfo};
 use crate::spawning::SpawnMoleculeFromSMILESEvent;
@@ -7,10 +7,22 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 pub struct AminoAcidSpawnerPlugin;
 
+#[derive(Resource, Default)]
+struct SpawnerState {
+    is_open: bool,
+}
+
 impl Plugin for AminoAcidSpawnerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_amino_acid_info)
-            .add_systems(EguiPrimaryContextPass, amino_acid_spawner_egui_system);
+        app.init_resource::<SpawnerState>()
+            .add_systems(Startup, setup_amino_acid_info)
+            .add_systems(
+                EguiPrimaryContextPass,
+                (
+                    amino_acid_spawner_egui_system,
+                    amino_acid_spawner_toggle_button,
+                ),
+            );
     }
 }
 
@@ -32,13 +44,14 @@ fn setup_amino_acid_info(mut commands: Commands) {
 }
 fn amino_acid_spawner_egui_system(
     mut contexts: EguiContexts,
+    mut state: ResMut<SpawnerState>,
     amino_acid_info: Res<AminoAcidInfo>,
-    // We now send the standard spawn event directly.
     mut spawn_writer: EventWriter<SpawnMoleculeFromSMILESEvent>,
 ) {
     let Ok(ctx) = contexts.ctx_mut() else { return };
 
     egui::Window::new("Amino Acid Spawner")
+        .open(&mut state.is_open)
         .default_pos(ctx.screen_rect().right_bottom() + egui::vec2(10.0, 10.0))
         .show(ctx, |ui| {
             ui.heading("Standard Amino Acids");
@@ -68,5 +81,16 @@ fn amino_acid_spawner_egui_system(
                     }
                 });
             });
+        });
+}
+
+fn amino_acid_spawner_toggle_button(mut contexts: EguiContexts, mut state: ResMut<SpawnerState>) {
+    let Ok(ctx) = contexts.ctx_mut() else { return };
+    egui::Area::new(egui::Id::new("spawner_toggle_button_area"))
+        .anchor(egui::Align2::RIGHT_CENTER, egui::vec2(10.0, 10.0))
+        .show(ctx, |ui| {
+            if ui.button("Amino Acids").clicked() {
+                state.is_open = !state.is_open;
+            }
         });
 }

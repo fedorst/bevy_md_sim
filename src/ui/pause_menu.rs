@@ -2,11 +2,11 @@
 
 use crate::AppState;
 use crate::components::Solvent;
-use crate::persistence::{LoadStateEvent, SAVE_FILE_PATH, SaveStateEvent};
+use crate::persistence::{LoadStateEvent, SaveStateEvent};
 use crate::resources::{
     ForceMultiplier, LastSaveTime, PauseMenuState, SimulationParameters, Thermostat,
 };
-use crate::spawning::{DespawnSolventEvent, SpawnSolventEvent};
+use crate::spawning::{ClearAllMoleculesEvent, DespawnSolventEvent, SpawnSolventEvent};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 pub struct PauseMenuPlugin;
@@ -40,6 +40,7 @@ fn pause_menu_egui_system(
     mut despawn_writer: EventWriter<DespawnSolventEvent>,
     mut save_state_writer: EventWriter<SaveStateEvent>,
     mut load_state_writer: EventWriter<LoadStateEvent>,
+    mut clear_writer: EventWriter<ClearAllMoleculesEvent>,
     last_save_time: Res<LastSaveTime>,
 ) {
     let Ok(ctx) = contexts.ctx_mut() else { return };
@@ -64,7 +65,7 @@ fn pause_menu_egui_system(
         .open(&mut is_open) // Binds to the 'x' button
         .collapsible(false)
         .resizable(false) // Keep it a fixed size
-        .default_pos(ctx.screen_rect().center() - egui::vec2(150.0, 300.0)) // Approx center
+        .default_pos(ctx.screen_rect().center() - egui::vec2(150.0, 400.0)) // Approx center
         .id(egui::Id::new("settings_window"))
         .show(ctx, |ui| {
             ui.set_width(300.0);
@@ -128,23 +129,25 @@ fn pause_menu_egui_system(
                     spawn_writer.write(SpawnSolventEvent);
                 }
             }
-            #[cfg(not(target_arch = "wasm32"))]
-            {
-                ui.add_space(10.0);
-                ui.separator();
-                ui.add_space(10.0);
 
-                ui.horizontal(|ui| {
-                    if ui.button("Save State").clicked() {
-                        save_state_writer.write(SaveStateEvent(SAVE_FILE_PATH.to_string()));
-                    }
-                    if ui.button("Load State").clicked() {
-                        load_state_writer.write(LoadStateEvent(SAVE_FILE_PATH.to_string()));
-                    }
-                });
-                ui.add_space(2.0);
-                ui.label(&last_save_time.display_text);
+            if ui.button("Clear All Molecules").clicked() {
+                clear_writer.write(ClearAllMoleculesEvent);
             }
+
+            ui.add_space(10.0);
+            ui.separator();
+            ui.add_space(10.0);
+
+            ui.horizontal(|ui| {
+                if ui.button("Save State").clicked() {
+                    save_state_writer.write(SaveStateEvent);
+                }
+                if ui.button("Load State").clicked() {
+                    load_state_writer.write(LoadStateEvent);
+                }
+            });
+            ui.add_space(2.0);
+            ui.label(&last_save_time.display_text);
             ui.add_space(10.0);
             ui.separator();
 
