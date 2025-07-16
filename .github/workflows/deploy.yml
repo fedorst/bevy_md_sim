@@ -91,6 +91,15 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: rm -rf /var/www/md.fedor.ee/*
 
+      - name: Debug - show what we're copying
+        run: |
+          echo "Contents of current directory:"
+          ls -la
+          echo "Contents of static directory:"
+          ls -la static/
+          echo "Tree view:"
+          tree static/ || find static/ -type f
+
       - name: Copy files to server via scp
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -100,6 +109,18 @@ jobs:
           source: "./static/"
           target: "/var/www/md.fedor.ee"
           strip_components: 1
+
+      - name: Debug - check what was copied
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: md.fedor.ee
+          username: fedor
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "Contents of /var/www/md.fedor.ee:"
+            ls -la /var/www/md.fedor.ee/
+            echo "Full tree:"
+            find /var/www/md.fedor.ee/ -type f
 
   # --- JOB 2: Deploy the API Backend ---
   deploy-api:
