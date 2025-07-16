@@ -63,7 +63,8 @@ impl Plugin for SpawningPlugin {
                 ),
             );
         #[cfg(target_arch = "wasm32")]
-        app.add_systems(Update, handle_molecule_generation_task);
+        app.init_resource::<MoleculeGenerationTasks>()
+            .add_systems(Update, handle_molecule_generation_task);
     }
 }
 
@@ -336,7 +337,7 @@ fn trigger_molecule_generation(
 
 #[cfg(target_arch = "wasm32")]
 fn trigger_molecule_generation(
-    mut commands: Commands,
+    mut tasks_res: ResMut<MoleculeGenerationTasks>,
     mut spawn_events: ResMut<Events<SpawnMoleculeFromSMILESEvent>>,
 ) {
     for event in spawn_events.drain() {
@@ -363,28 +364,31 @@ fn trigger_molecule_generation(
         });
 
         // We need a component to hold the task and a system to poll it
-        commands.spawn(MoleculeGenerationTask(task));
+        tasks_res.0.push(task);
     }
 }
 
 #[cfg(target_arch = "wasm32")]
-#[derive(Component)]
-struct MoleculeGenerationTask(Task<Option<SpawnMoleculeFromJsonEvent>>);
+#[derive(Resource, Default)]
+struct MoleculeGenerationTasks(Vec<Task<Option<SpawnMoleculeFromJsonEvent>>>);
 
 #[cfg(target_arch = "wasm32")]
 fn handle_molecule_generation_task(
-    mut commands: Commands,
-    mut tasks: Query<(Entity, &mut MoleculeGenerationTask)>,
+    mut tasks_res: ResMut<MoleculeGenerationTasks>,
     mut writer: EventWriter<SpawnMoleculeFromJsonEvent>,
 ) {
-    for (entity, mut task) in &mut tasks {
+    let mut completed_tasks_indices = Vec::new();
+    for (i, task) in tasks_res.0.iter_mut().enumerate() {
         if let Some(Some(event)) =
-            futures_lite::future::block_on(futures_lite::future::poll_once(&mut task.0))
+            futures_lite::future::block_on(futures_lite::future::poll_once(task))
         {
             info!(">>> [ASYNC_HANDLER] Task finished. Firing SpawnMoleculeFromJsonEvent.");
             writer.write(event);
-            commands.entity(entity).despawn();
+            completed_tasks_indices.push(i); // Mark this task for removal
         }
+    }
+    for i in completed_tasks_indices.iter().rev() {
+        tasks_res.0.remove(*i);
     }
 }
 
