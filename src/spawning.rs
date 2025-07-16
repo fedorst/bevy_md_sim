@@ -1,5 +1,6 @@
 // src/spawning.rs
 
+use crate::MoleculeIdCounter;
 use crate::components::*;
 use crate::components::{Molecule, Solvent};
 use crate::config::MoleculeConfig;
@@ -397,6 +398,7 @@ fn spawn_molecules_from_json(
     mut atom_id_map: ResMut<AtomIdMap>,
     mut rebuild_writer: EventWriter<RebuildConnectivityEvent>,
     existing_atoms: Query<&Transform, With<Atom>>,
+    mut molecule_id_counter: ResMut<MoleculeIdCounter>,
 ) {
     for event in events.read() {
         info!(">>> [SPAWNER] Saw SpawnMoleculeFromJsonEvent. Spawning molecule NOW.");
@@ -407,6 +409,9 @@ fn spawn_molecules_from_json(
                 continue;
             }
         };
+
+        let molecule_id = MoleculeId(molecule_id_counter.0);
+        molecule_id_counter.0 += 1;
 
         let mut offset = Vec3::ZERO;
         if !existing_atoms.is_empty() {
@@ -457,6 +462,7 @@ fn spawn_molecules_from_json(
         let molecule_entity = commands
             .spawn((
                 Molecule,
+                molecule_id,
                 Name::new(config.name.clone()),
                 (
                     Transform::default(),
@@ -475,6 +481,7 @@ fn spawn_molecules_from_json(
                         Atom {
                             type_name: atom_spec.type_name.clone(),
                         },
+                        molecule_id,
                         Force::default(),
                         Velocity(Vec3::ZERO),
                         Acceleration(Vec3::ZERO),

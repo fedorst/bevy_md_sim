@@ -1,12 +1,12 @@
 // src/persistence.rs
 
-use crate::components::{Acceleration, Atom, Force, Molecule, Velocity};
+use crate::components::{Acceleration, Atom, Force, Molecule, MoleculeId, Velocity};
 use crate::interaction::RebuildConnectivityEvent;
 use crate::resources::{AtomIdMap, Bond, BondOrder, LastSaveTime, SystemConnectivity};
 #[cfg(target_arch = "wasm32")]
 use crate::spawning::SpawnMoleculeFromJsonEvent;
 use crate::spawning_utils::get_atom_visuals;
-use bevy::prelude::*; // Make sure Time is imported
+use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
@@ -26,7 +26,7 @@ const SAVE_FILE_PATH: &str = "simulation_state.json";
 const LOCALSTORAGE_KEY: &str = "md_simulation_save_state";
 
 fn create_save_state(
-    atom_query: &Query<(&Atom, &Transform, &Velocity, Entity)>,
+    atom_query: &Query<(&Atom, &Transform, &Velocity, Entity, &MoleculeId)>,
     connectivity: &Res<SystemConnectivity>,
     atom_id_map: &Res<AtomIdMap>,
 ) -> SimulationSaveState {
@@ -34,16 +34,16 @@ fn create_save_state(
 
     let atom_states: Vec<AtomState> = atom_query
         .iter()
-        .filter_map(|(atom, transform, velocity, entity)| {
-            atom_id_map.entity_to_id.get(&entity).map(|id| {
-                let element = atom.type_name.chars().next().unwrap_or('?').to_string();
-                AtomState {
-                    id: id.clone(),
-                    type_name: atom.type_name.clone(),
-                    element,
-                    position: transform.translation.to_array(),
-                    velocity: velocity.0.to_array(),
-                }
+        .filter_map(|(atom, transform, velocity, entity, molecule_id)| {
+            let base_id = atom_id_map.entity_to_id.get(&entity)?;
+            let unique_id = format!("mol{}_{}", molecule_id.0, base_id);
+            let element = atom.type_name.chars().next().unwrap_or('?').to_string();
+            Some(AtomState {
+                id: unique_id,
+                type_name: atom.type_name.clone(),
+                element,
+                position: transform.translation.to_array(),
+                velocity: velocity.0.to_array(),
             })
         })
         .collect();
@@ -52,10 +52,16 @@ fn create_save_state(
         .bonds
         .iter()
         .filter_map(|bond| {
-            let id1 = atom_id_map.entity_to_id.get(&bond.a)?;
-            let id2 = atom_id_map.entity_to_id.get(&bond.b)?;
+            let (_, _, _, _, mol_id_a) = atom_query.get(bond.a).ok()?;
+            let (_, _, _, _, mol_id_b) = atom_query.get(bond.b).ok()?;
+
+            let base_id_a = atom_id_map.entity_to_id.get(&bond.a)?;
+            let base_id_b = atom_id_map.entity_to_id.get(&bond.b)?;
+
+            let unique_id_a = format!("mol{}_{}", mol_id_a.0, base_id_a);
+            let unique_id_b = format!("mol{}_{}", mol_id_b.0, base_id_b);
             Some(SavedBond {
-                atom_ids: [id1.clone(), id2.clone()],
+                atom_ids: [unique_id_a, unique_id_b],
                 order: bond.order,
             })
         })
@@ -70,7 +76,7 @@ fn create_save_state(
 #[cfg(target_arch = "wasm32")]
 fn save_state_to_localstorage_on_event(
     mut events: EventReader<SaveStateEvent>,
-    atom_query: Query<(&Atom, &Transform, &Velocity, Entity)>,
+    atom_query: Query<(&Atom, &Transform, &Velocity, Entity, &MoleculeId)>,
     connectivity: Res<SystemConnectivity>,
     atom_id_map: Res<AtomIdMap>,
 ) {
@@ -266,7 +272,7 @@ pub struct SavedBond {
 #[cfg(not(target_arch = "wasm32"))]
 fn save_state_to_file_on_event(
     mut events: EventReader<SaveStateEvent>,
-    atom_query: Query<(&Atom, &Transform, &Velocity, Entity)>,
+    atom_query: Query<(&Atom, &Transform, &Velocity, Entity, &MoleculeId)>,
     connectivity: Res<SystemConnectivity>,
     atom_id_map: Res<AtomIdMap>,
 ) {

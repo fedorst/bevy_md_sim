@@ -10,6 +10,9 @@ pub struct LastSaveTime {
     pub display_text: String,
 }
 
+#[derive(Resource, Default, Deref, DerefMut)]
+pub struct MoleculeIdCounter(pub u32);
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct AminoAcidData {
     pub name: String,

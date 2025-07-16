@@ -88,7 +88,8 @@ impl Plugin for CorePlugin {
             .init_resource::<AtomIdMap>()
             .init_resource::<LastSaveTime>()
             .init_resource::<LastClick>()
-            .init_resource::<ExcludedPairs>();
+            .init_resource::<ExcludedPairs>()
+            .init_resource::<MoleculeIdCounter>();
         // .add_systems(Update, track_active_wall_time);
     }
 }

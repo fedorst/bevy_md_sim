@@ -43,3 +43,6 @@ pub struct BondVisualization {
     pub strand_index: u8,
     pub total_strands: u8,
 }
+
+#[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct MoleculeId(pub u32);
