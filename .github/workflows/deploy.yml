@@ -1,16 +1,14 @@
-name: Build and Deploy Bevy Frontend
+name: Build and Deploy Full Application
 
-# This workflow runs on every push to the 'main' branch
 on:
   push:
     branches:
       - main
 
 jobs:
-  # --- JOB 1: Build the WASM Application ---
-  build:
+  # --- JOB 1: Build and Deploy the WASM Frontend ---
+  deploy-frontend:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -34,80 +32,62 @@ jobs:
       - name: Install wasm-bindgen-cli
         run: cargo install wasm-bindgen-cli
 
-      - name: Build WASM binary in release mode
+      - name: Build WASM binary
         run: cargo build --release --target wasm32-unknown-unknown
 
-      - name: Create 'static' directory for web files
-        run: mkdir static
-
-      - name: Run wasm-bindgen
+      - name: Create 'static' directory and package files
         run: |
-          wasm-bindgen --out-dir static --target web \
-            target/wasm32-unknown-unknown/release/molecular_dynamics.wasm
-
-      - name: Copy assets into the static directory
-        run: cp -r assets static/
-
-      - name: Create index.html
-        run: |
-          # This creates the index.html file needed to run the app
+          mkdir static
+          wasm-bindgen --out-dir static --target web target/wasm32-unknown-unknown/release/molecular_dynamics.wasm
+          cp -r assets static/
+          # Create index.html (with JS glue code inside)
           cat > static/index.html <<- EOM
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <meta charset="utf-8" />
-              <title>Molecular Dynamics Simulation</title>
-              <style>
-                body { margin: 0; background-color: black; }
-                canvas#bevy { width: 100vw; height: 100vh; }
-              </style>
-            </head>
-            <body>
-              <canvas id="bevy"></canvas>
-              <script>
-                const SAVE_TIMESTAMP_KEY = "simulation_save_timestamp";
-                function js_save_to_localstorage(key, value) { window.localStorage.setItem(key, value); window.localStorage.setItem(SAVE_TIMESTAMP_KEY, new Date().toISOString()); }
-                function js_load_from_localstorage(key) { return window.localStorage.getItem(key); }
-                function js_get_save_timestamp() { return window.localStorage.getItem(SAVE_TIMESTAMP_KEY); }
-              </script>
-              <script type="module">
-                import init from './molecular_dynamics.js';
-                init();
-              </script>
-            </body>
-          </html>
+          <!DOCTYPE html><html><head><meta charset="utf-8"/><title>Molecular Dynamics Simulation</title><style>body{margin:0;background-color:black;}canvas#bevy{width:100vw;height:100vh;}</style></head><body><canvas id="bevy"></canvas><script>const SAVE_TIMESTAMP_KEY="simulation_save_timestamp";function js_save_to_localstorage(k,v){window.localStorage.setItem(k,v);window.localStorage.setItem(SAVE_TIMESTAMP_KEY,new Date().toISOString())}function js_load_from_localstorage(k){return window.localStorage.getItem(k)}function js_get_save_timestamp(){return window.localStorage.getItem(SAVE_TIMESTAMP_KEY)}</script><script type="module">import init from './molecular_dynamics.js';init();</script></body></html>
           EOM
 
-      - name: Upload the 'static' directory as an artifact
-        uses: actions/upload-artifact@v4
+      - name: Clean destination directory on server
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          name: static-site-files
-          path: static/
+          host: md.fedor.ee
+          username: fedor
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: rm -rf /var/www/md.fedor.ee/*
 
-  # --- JOB 2: Deploy the files to the server ---
-  deploy:
+      - name: Copy files to server via scp
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: md.fedor.ee
+          username: fedor
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "./static/*" # Copy contents of static folder
+          target: "/var/www/md.fedor.ee"
+
+  # --- JOB 2: Deploy the API Backend ---
+  deploy-api:
     runs-on: ubuntu-latest
-    needs: build
-
+    # This job runs in parallel with the frontend deploy
     steps:
-      - name: Download the site files artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: static-site-files
-          # Specify a path to be extra clear
-          path: ./downloaded-site
-
-      - name: List downloaded files for debugging
-        run: ls -R ./downloaded-site
-
-      - name: Deploy to DigitalOcean Droplet via rsync
+      - name: Deploy API update to DigitalOcean
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: md.fedor.ee
           username: fedor
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            # Use rsync to sync the contents of the downloaded directory
-            # The trailing slash on the source path is important!
-            rsync -avz --delete ./downloaded-site/ /var/www/md.fedor.ee/
-            echo "Deployment to md.fedor.ee complete!"
+            # This script runs on your server
+            # 1. Navigate to the project directory
+            cd /home/fedor/bevy_md_sim
+
+            # 2. Pull the latest code changes from GitHub
+            git pull origin main
+
+            # 3. Re-build the 'api' docker image if its source has changed
+            docker compose build api
+
+            # 4. Restart services. `up -d` is smart and will only
+            #    recreate containers whose images have been updated.
+            docker compose up -d
+
+            # 5. (Optional but Recommended) Clean up old, unused Docker images
+            docker image prune -f
+            echo "API deployment complete!"
