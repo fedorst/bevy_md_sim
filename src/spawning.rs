@@ -13,6 +13,13 @@ use futures_lite::future;
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
 
+#[cfg(target_arch = "wasm32")]
+#[derive(Debug)]
+enum MoleculeGenerationResult {
+    Success(String, Option<IVec3>),
+    Failure(String),
+}
+
 #[derive(Event, Debug)]
 pub struct ClearAllMoleculesEvent;
 
@@ -39,6 +46,10 @@ pub struct SpawnMoleculeFromJsonEvent(pub String, pub Option<IVec3>);
 #[derive(Component)]
 struct ValidationTask(Option<Task<SMILESValidationResult>>);
 
+#[cfg(target_arch = "wasm32")]
+#[derive(Resource, Default)]
+struct ValidationTasks(Vec<Task<SMILESValidationResult>>);
+
 pub struct SpawningPlugin;
 
 impl Plugin for SpawningPlugin {
@@ -55,16 +66,24 @@ impl Plugin for SpawningPlugin {
                 (
                     trigger_molecule_generation,
                     trigger_smiles_validation,
-                    handle_validation_result,
                     clear_all_molecules_on_event,
                     spawn_molecules_from_json.run_if(on_event::<SpawnMoleculeFromJsonEvent>),
                     handle_spawn_solvent_event.run_if(on_event::<SpawnSolventEvent>),
                     handle_despawn_solvent_event.run_if(on_event::<DespawnSolventEvent>),
                 ),
             );
+        #[cfg(not(target_arch = "wasm32"))]
+        app.add_systems(Update, handle_validation_result);
         #[cfg(target_arch = "wasm32")]
         app.init_resource::<MoleculeGenerationTasks>()
-            .add_systems(Update, handle_molecule_generation_task);
+            .init_resource::<ValidationTasks>()
+            .add_systems(
+                Update,
+                (
+                    handle_molecule_generation_task,
+                    handle_validation_result_wasm,
+                ),
+            );
     }
 }
 
@@ -228,6 +247,7 @@ fn handle_despawn_solvent_event(
     rebuild_writer.write(RebuildConnectivityEvent);
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn trigger_smiles_validation(
     mut commands: Commands,
     mut validation_events: EventReader<ValidateSMILESEvent>,
@@ -280,6 +300,55 @@ fn trigger_smiles_validation(
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+fn trigger_smiles_validation(
+    mut tasks: ResMut<ValidationTasks>,
+    mut validation_events: EventReader<ValidateSMILESEvent>,
+) {
+    if let Some(event) = validation_events.read().last() {
+        let smiles = event.0.clone();
+        let task = AsyncComputeTaskPool::get().spawn(async move {
+            let api_url = "https://md.fedor.ee/api/validate_smiles";
+            let client = reqwest::Client::new();
+            let response = client
+                .post(api_url)
+                .json(&serde_json::json!({ "smiles": smiles }))
+                .send()
+                .await;
+
+            match response {
+                Ok(res) if res.status().is_success() => SMILESValidationResult(Ok(())),
+                Ok(res) => {
+                    let detail = res.text().await.unwrap_or_else(|_| "Unknown error".into());
+                    SMILESValidationResult(Err(detail))
+                }
+                Err(e) => SMILESValidationResult(Err(e.to_string())),
+            }
+        });
+        // Clear old tasks and add the new one
+        tasks.0.clear();
+        tasks.0.push(task);
+    }
+}
+
+// New handler for the WASM validation task
+#[cfg(target_arch = "wasm32")]
+fn handle_validation_result_wasm(
+    mut tasks: ResMut<ValidationTasks>,
+    mut result_writer: EventWriter<SMILESValidationResult>,
+) {
+    tasks.0.retain_mut(|task| {
+        if let Some(result) = futures_lite::future::block_on(futures_lite::future::poll_once(task))
+        {
+            result_writer.write(result);
+            false // Remove the task
+        } else {
+            true // Keep the task
+        }
+    });
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn handle_validation_result(
     mut commands: Commands,
     mut tasks: Query<(Entity, &mut ValidationTask)>,
@@ -356,40 +425,51 @@ fn trigger_molecule_generation(
 
             match response {
                 Ok(res) if res.status().is_success() => match res.text().await {
-                    Ok(text) => Some(SpawnMoleculeFromJsonEvent(text, grid_info)),
-                    Err(_) => None,
+                    Ok(text) => MoleculeGenerationResult::Success(text, grid_info),
+                    Err(e) => MoleculeGenerationResult::Failure(e.to_string()),
                 },
-                _ => None,
+                Ok(res) => {
+                    // This handles HTTP 400/500 errors from the API
+                    let err_text = res
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Failed to read error body".to_string());
+                    MoleculeGenerationResult::Failure(format!("API Error: {}", err_text))
+                }
+                Err(e) => MoleculeGenerationResult::Failure(e.to_string()),
             }
         });
 
-        // We need a component to hold the task and a system to poll it
         tasks_res.0.push(task);
     }
 }
 
 #[cfg(target_arch = "wasm32")]
 #[derive(Resource, Default)]
-struct MoleculeGenerationTasks(Vec<Task<Option<SpawnMoleculeFromJsonEvent>>>);
+struct MoleculeGenerationTasks(Vec<Task<MoleculeGenerationResult>>);
 
 #[cfg(target_arch = "wasm32")]
 fn handle_molecule_generation_task(
     mut tasks_res: ResMut<MoleculeGenerationTasks>,
     mut writer: EventWriter<SpawnMoleculeFromJsonEvent>,
 ) {
-    let mut completed_tasks_indices = Vec::new();
-    for (i, task) in tasks_res.0.iter_mut().enumerate() {
-        if let Some(Some(event)) =
-            futures_lite::future::block_on(futures_lite::future::poll_once(task))
+    tasks_res.0.retain_mut(|task| {
+        if let Some(result) = futures_lite::future::block_on(futures_lite::future::poll_once(task))
         {
-            info!(">>> [ASYNC_HANDLER] Task finished. Firing SpawnMoleculeFromJsonEvent.");
-            writer.write(event);
-            completed_tasks_indices.push(i); // Mark this task for removal
+            match result {
+                MoleculeGenerationResult::Success(json_string, grid_info) => {
+                    info!(">>> [ASYNC_HANDLER] Task succeeded. Firing SpawnMoleculeFromJsonEvent.");
+                    writer.write(SpawnMoleculeFromJsonEvent(json_string, grid_info));
+                }
+                MoleculeGenerationResult::Failure(error_message) => {
+                    error!("Molecule generation failed: {}", error_message);
+                }
+            }
+            false // Task is complete, remove it from the list
+        } else {
+            true // Task is not complete, keep it
         }
-    }
-    for i in completed_tasks_indices.iter().rev() {
-        tasks_res.0.remove(*i);
-    }
+    });
 }
 
 // System 3: Spawns the new molecule from the generated JSON.

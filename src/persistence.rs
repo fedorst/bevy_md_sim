@@ -23,6 +23,7 @@ extern "C" {
 }
 
 const SAVE_FILE_PATH: &str = "simulation_state.json";
+#[cfg(target_arch = "wasm32")]
 const LOCALSTORAGE_KEY: &str = "md_simulation_save_state";
 
 fn create_save_state(

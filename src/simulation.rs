@@ -1,5 +1,4 @@
 use crate::AppState;
-use crate::CliArgs;
 use crate::components::{Acceleration, Atom, Constraint, Force, Velocity};
 use crate::resources::*;
 use bevy::prelude::*;
@@ -42,8 +41,7 @@ impl Plugin for SimulationPlugin {
                 calculate_dihedral_forces,
                 calculate_non_bonded_forces,
                 sum_total_forces,
-                log_initial_state_and_pause, // We do NOT integrate, we just calculate forces
-                                             // run_one_pre_simulation_tick, // This system transitions us out of PreSimulation
+                log_initial_state_and_pause,
             )
                 .chain()
                 .run_if(in_state(AppState::PreSimulation)),
@@ -364,21 +362,6 @@ fn calculate_angle_forces(
             energy.potential += 0.5 * angle_k * (theta - angle_theta0).powi(2);
         }
     }
-}
-
-fn run_one_pre_simulation_tick(
-    mut commands: Commands,
-    mut next_state: ResMut<NextState<AppState>>,
-    cli: Res<CliArgs>, // We need to re-add CliArgs to this system
-) {
-    info!("Running one pre-simulation physics tick to calculate initial forces.");
-
-    if cli.paused {
-        next_state.set(AppState::Paused);
-    } else {
-        next_state.set(AppState::Running);
-    }
-    commands.remove_resource::<CliArgs>();
 }
 
 fn log_initial_state_and_pause(

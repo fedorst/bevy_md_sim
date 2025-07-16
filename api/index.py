@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from src_py.auto_typer import build_molecule_from_smiles # Import from your library
-from rdkit import rdBase
+from rdkit import rdBase, Chem
 
 # Vercel will look for this 'app' variable
 app = FastAPI()
@@ -48,3 +48,14 @@ def test_rdkit_version():
         return {"status": "ok", "rdkit_version": version}
     except Exception as e:
         return {"status": "error", "detail": str(e)}
+
+@app.post("/validate_smiles")
+def validate_smiles_endpoint(request: SmilesRequest):
+    """
+    Validates a SMILES string using RDKit without generating a full molecule.
+    """
+    mol = Chem.MolFromSmiles(request.smiles)
+    if mol is None:
+        raise HTTPException(status_code=400, detail="Invalid SMILES string")
+
+    return {"status": "ok", "message": "SMILES is valid"}

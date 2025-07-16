@@ -79,7 +79,7 @@ fn hud_egui_system(
         egui::Area::new(egui::Id::new("hud_paused_text"))
             .anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, 100.0))
             .show(ctx, |ui| {
-                let text = egui::RichText::new("PAUSED")
+                let text = egui::RichText::new("PAUSED (space to unpause)")
                     .font(egui::FontId::proportional(48.0))
                     .color(egui::Color32::from_white_alpha(180))
                     .strong();

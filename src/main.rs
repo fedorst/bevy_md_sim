@@ -10,6 +10,7 @@ mod spawning;
 mod spawning_utils;
 mod ui;
 mod visualization;
+#[cfg(target_arch = "wasm32")]
 use bevy::audio::AudioPlugin;
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
