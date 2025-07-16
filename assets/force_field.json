@@ -404,6 +404,18 @@
     },
     { "types": ["CA", "CA"], "order": "Aromatic", "k": 401664.0, "r0": 0.139 },
     {
+      "types": ["CA", "N_AR"],
+      "order": "Aromatic",
+      "k": 389112.0,
+      "r0": 0.138
+    },
+    {
+      "types": ["CA", "N_AR"],
+      "order": "Single",
+      "k": 389112.0,
+      "r0": 0.138
+    },
+    {
       "types": ["CA", "N_AMINE"],
       "order": "Aromatic",
       "k": 389112.0,
