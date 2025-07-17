@@ -45,10 +45,25 @@ jobs:
         run: |
           mkdir static
           wasm-bindgen --out-dir static --target web target/wasm32-unknown-unknown/release/molecular_dynamics.wasm
-          cp -r assets static/
 
-      - name: Copy index.html
-        run: cp index.html static/
+      - name: Install wasm-opt (binaryen)
+        run: sudo apt-get update && sudo apt-get install -y binaryen
+
+      - name: Optimize WASM binary
+        run: |
+          echo "Initial WASM size:"
+          ls -lh static/molecular_dynamics_bg.wasm
+          wasm-opt -O3 --strip-debug static/molecular_dynamics_bg.wasm -o static/molecular_dynamics_bg.wasm
+          echo "Optimized WASM size:"
+          ls -lh static/molecular_dynamics_bg.wasm
+
+      - name: Pre-compress WASM with Gzip
+        run: gzip -k -9 static/molecular_dynamics_bg.wasm
+
+      - name: Copy assets and index.html
+        run: |
+          cp -r assets static/
+          cp index.html static/
 
       - name: Clean destination directory on server
         uses: appleboy/ssh-action@v1.0.3
