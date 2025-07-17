@@ -2,7 +2,7 @@ import subprocess
 from pathlib import Path
 
 # extensions to include
-exts = {".json", ".md", ".ts", ".js", ".svelte", ".yml", ".env", ".py", ".rs", ".toml", ".py"}
+exts = {".json", ".md", ".ts", ".js", ".svelte", ".yml", ".env", ".py", ".rs", ".toml", ".py", ".conf"}
 extra_files = {"Dockerfile"}
 out_path = Path("concatenated_dump.txt")
 
