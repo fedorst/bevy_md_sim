@@ -46,8 +46,14 @@ jobs:
           mkdir static
           wasm-bindgen --out-dir static --target web target/wasm32-unknown-unknown/release/molecular_dynamics.wasm
 
-      - name: Install wasm-opt (binaryen)
-        run: sudo apt-get update && sudo apt-get install -y binaryen
+      - name: Install Binaryen 123
+        run: |
+          wget -q https://github.com/WebAssembly/binaryen/releases/download/version_123/binaryen-version_123-x86_64-linux.tar.gz
+          sudo tar -xf binaryen-version_123-x86_64-linux.tar.gz -C /opt
+          sudo ln -sf /opt/binaryen-version_123/bin/wasm-* /usr/local/bin/
+
+      - name: Check wasm-opt version
+        run: wasm-opt --version # should print 123
 
       - name: Optimize WASM binary
         run: |
